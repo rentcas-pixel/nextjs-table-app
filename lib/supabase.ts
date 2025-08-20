@@ -56,11 +56,8 @@ export type ReminderRecord = {
 export interface WaitingListClient {
   id: string
   name: string
-  email: string
-  phone: string
   desiredPeriod: string
   notes: string
-  createdAt: string
 }
 
 // Helpers to map camelCase <-> snake/lowercase columns
@@ -171,11 +168,8 @@ function toDbWaitingList(w: WaitingListClient): any {
   return {
     id: w.id,
     name: w.name,
-    email: w.email,
-    phone: w.phone,
     desired_period: w.desiredPeriod,
     notes: w.notes,
-    created_at: w.createdAt,
   }
 }
 
@@ -183,11 +177,8 @@ function fromDbWaitingList(row: any): WaitingListClient {
   return {
     id: row.id,
     name: row.name,
-    email: row.email,
-    phone: row.phone,
     desiredPeriod: row.desired_period ?? row.desiredPeriod ?? '',
     notes: row.notes,
-    createdAt: row.created_at ?? row.createdAt ?? '',
   }
 }
 

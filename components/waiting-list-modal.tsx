@@ -11,10 +11,8 @@ interface WaitingListModalProps {
 
 export default function WaitingListModal({ open, onOpenChange }: WaitingListModalProps) {
   const [clients, setClients] = useState<WaitingListClient[]>([])
-  const [newClient, setNewClient] = useState<Omit<WaitingListClient, 'id' | 'createdAt'>>({
+  const [newClient, setNewClient] = useState<Omit<WaitingListClient, 'id'>>({
     name: '',
-    email: '',
-    phone: '',
     desiredPeriod: '',
     notes: ''
   })
@@ -40,15 +38,14 @@ export default function WaitingListModal({ open, onOpenChange }: WaitingListModa
   }
 
   const handleAddClient = async () => {
-    if (!newClient.name || !newClient.email) {
-      alert('Prašome užpildyti kliento pavadinimą ir emailą')
+    if (!newClient.name) {
+      alert('Prašome užpildyti kliento pavadinimą')
       return
     }
 
     const client: WaitingListClient = {
       id: `wl-${Date.now()}`,
-      ...newClient,
-      createdAt: new Date().toISOString()
+      ...newClient
     }
 
     try {
@@ -56,8 +53,6 @@ export default function WaitingListModal({ open, onOpenChange }: WaitingListModa
       setClients(prev => [...prev, client])
       setNewClient({
         name: '',
-        email: '',
-        phone: '',
         desiredPeriod: '',
         notes: ''
       })
@@ -77,7 +72,7 @@ export default function WaitingListModal({ open, onOpenChange }: WaitingListModa
     }
   }
 
-  const handleFormChange = (field: keyof typeof newClient, value: string) => {
+  const handleFormChange = (field: 'name' | 'desiredPeriod' | 'notes', value: string) => {
     setNewClient(prev => ({ ...prev, [field]: value }))
   }
 
@@ -113,26 +108,6 @@ export default function WaitingListModal({ open, onOpenChange }: WaitingListModa
                     onChange={(e) => handleFormChange('name', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Įveskite kliento pavadinimą"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                  <input
-                    type="email"
-                    value={newClient.email}
-                    onChange={(e) => handleFormChange('email', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Įveskite email'ą"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Telefonas</label>
-                  <input
-                    type="tel"
-                    value={newClient.phone}
-                    onChange={(e) => handleFormChange('phone', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Įveskite telefono numerį"
                   />
                 </div>
                 <div>
@@ -172,11 +147,8 @@ export default function WaitingListModal({ open, onOpenChange }: WaitingListModa
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Pavadinimas</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Email</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Telefonas</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Norimas periodas</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Pastabos</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Data</th>
                     <th className="px-4 py-3 text-center text-sm font-medium text-gray-900">Veiksmai</th>
                   </tr>
                 </thead>
@@ -184,14 +156,9 @@ export default function WaitingListModal({ open, onOpenChange }: WaitingListModa
                   {clients.map((client) => (
                     <tr key={client.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{client.name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{client.email}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{client.phone || '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-900">{client.desiredPeriod || '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate" title={client.notes}>
                         {client.notes || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">
-                        {new Date(client.createdAt).toLocaleDateString('lt-LT')}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button
@@ -205,8 +172,8 @@ export default function WaitingListModal({ open, onOpenChange }: WaitingListModa
                   ))}
                   {clients.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                                                 Waiting listas tuščias. Pridėkite pirmą klientą!
+                      <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                        Waiting listas tuščias. Pridėkite pirmą klientą!
                       </td>
                     </tr>
                   )}
