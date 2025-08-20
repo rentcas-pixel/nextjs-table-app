@@ -34,71 +34,12 @@ interface Reminder {
   remindAt: string // YYYY-MM-DD
 }
 
-const DEFAULT_CLIENTS: ClientData[] = [
-  {
-    id: '1',
-    name: 'Airnaras',
-    status: 'Patvirtinta',
-    orderNumber: 'ORD-001',
-    startDate: '2025-08-18',
-    endDate: '2025-08-24',
-    intensity: 'kas 1 (100%)',
-    weeks: {},
-    comment: ''
-  },
-  {
-    id: '2',
-    name: 'Artūras',
-    status: 'Rezervuota',
-    orderNumber: 'ORD-002',
-    startDate: '2025-08-25',
-    endDate: '2025-09-07',
-    intensity: 'kas 2 (50%)',
-    weeks: {},
-    hasWarning: true,
-    comment: ''
-  },
-  {
-    id: '3',
-    name: 'Aivaras ženklų salis',
-    status: 'Patvirtinta',
-    orderNumber: 'ORD-003',
-    startDate: '2025-09-08',
-    endDate: '2025-09-21',
-    intensity: 'kas 4 (25%)',
-    weeks: {},
-    hasWarning: true,
-    comment: ''
-  },
-  {
-    id: '4',
-    name: 'Akropolis',
-    status: 'Patvirtinta',
-    orderNumber: 'ORD-004',
-    startDate: '2025-08-18',
-    endDate: '2025-08-31',
-    intensity: 'kas 1 (100%)',
-    weeks: {},
-    comment: ''
-  },
-  {
-    id: '5',
-    name: 'Aivaras',
-    status: 'Rezervuota',
-    orderNumber: 'ORD-005',
-    startDate: '2025-09-01',
-    endDate: '2025-09-14',
-    intensity: 'kas 2 (50%)',
-    weeks: {},
-    hasWarning: true,
-    comment: ''
-  }
-]
+// DEFAULT_CLIENTS removed - all data now comes from Supabase
 
 export default function ResourceTable() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedTask, setSelectedTask] = useState<ClientData | null>(null)
-  const [clients, setClients] = useState<ClientData[]>(DEFAULT_CLIENTS)
+  const [clients, setClients] = useState<ClientData[]>([])
 
   const [newClientForm, setNewClientForm] = useState<NewClientForm>({
     name: '',
@@ -130,35 +71,35 @@ export default function ResourceTable() {
   const getReminder = (clientId: string) => reminders.find(r => r.clientId === clientId)
 
   const [hydrated, setHydrated] = useState(false)
-  // Load persisted data on mount (avoid SSR mismatch)
+  // Load data from Supabase on mount
   useEffect(() => {
-    try {
-      const storedClients = localStorage.getItem('viadukai.clients')
-      if (storedClients) {
-        const parsed = JSON.parse(storedClients)
-        if (Array.isArray(parsed)) setClients(parsed)
+    const loadData = async () => {
+      try {
+        const { fetchClients, fetchReminders } = await import('../lib/supabase')
+        const [clientsData, remindersData] = await Promise.all([
+          fetchClients(),
+          fetchReminders()
+        ])
+        
+        console.log('Loaded from Supabase:', { 
+          clients: clientsData.length, 
+          reminders: remindersData.length 
+        })
+        
+        setClients(clientsData)
+        setReminders(remindersData)
+      } catch (error) {
+        console.error('Error loading data from Supabase:', error)
       }
-    } catch {}
-    try {
-      const storedReminders = localStorage.getItem('viadukai.reminders')
-      if (storedReminders) {
-        const parsed = JSON.parse(storedReminders)
-        if (Array.isArray(parsed)) setReminders(parsed)
-      }
-    } catch {}
-    setHydrated(true)
+      setHydrated(true)
+    }
+    
+    loadData()
   }, [])
 
-  useEffect(() => {
-    if (!hydrated) return
-    try { localStorage.setItem('viadukai.clients', JSON.stringify(clients)) } catch {}
-  }, [clients, hydrated])
-  useEffect(() => {
-    if (!hydrated) return
-    try { localStorage.setItem('viadukai.reminders', JSON.stringify(reminders)) } catch {}
-  }, [reminders, hydrated])
+  // Data is now persisted directly to Supabase, no localStorage needed
 
-  const saveClientDetails = (update: {
+  const saveClientDetails = async (update: {
     id: string
     name?: string
     status?: 'Patvirtinta' | 'Rezervuota' | 'Atšaukta'
@@ -175,33 +116,42 @@ export default function ResourceTable() {
       if (v.includes('kas 4')) return 'kas 4 (25%)'
       return val
     }
-    setClients(prev => {
-      const next = prev.map(c => c.id === update.id ? {
-        ...c,
-        name: update.name ?? c.name,
-        status: update.status ?? c.status,
-        orderNumber: update.orderNumber ?? c.orderNumber,
-        intensity: normalizeIntensity(update.intensity) ?? c.intensity,
-        comment: update.comment ?? c.comment,
-        files: update.files ?? c.files
-      } : c)
-      try { localStorage.setItem('viadukai.clients', JSON.stringify(next)) } catch {}
-      return next
-    })
+    try {
+      const { upsertClient } = await import('../lib/supabase')
+      const updatedClient = clients.find(c => c.id === update.id)
+      if (updatedClient) {
+        const newClient = {
+          ...updatedClient,
+          name: update.name ?? updatedClient.name,
+          status: update.status ?? updatedClient.status,
+          orderNumber: update.orderNumber ?? updatedClient.orderNumber,
+          intensity: normalizeIntensity(update.intensity) ?? updatedClient.intensity,
+          comment: update.comment ?? updatedClient.comment,
+          files: update.files ?? updatedClient.files
+        }
+        await upsertClient(newClient)
+        setClients(prev => prev.map(c => c.id === update.id ? newClient : c))
+      }
+    } catch (error) {
+      console.error('Error updating client:', error)
+      alert('Klaida atnaujinant klientą')
+    }
   }
 
-  const deleteClient = (clientId: string) => {
-    setClients(prev => {
-      const next = prev.filter(c => c.id !== clientId)
-      try { localStorage.setItem('viadukai.clients', JSON.stringify(next)) } catch {}
-      return next
-    })
-    setReminders(prev => {
-      const next = prev.filter(r => r.clientId !== clientId)
-      try { localStorage.setItem('viadukai.reminders', JSON.stringify(next)) } catch {}
-      return next
-    })
-    setIsModalOpen(false)
+  const deleteClient = async (clientId: string) => {
+    try {
+      const { deleteClientById, deleteRemindersByClient } = await import('../lib/supabase')
+      await Promise.all([
+        deleteClientById(clientId),
+        deleteRemindersByClient(clientId)
+      ])
+      
+      setClients(prev => prev.filter(c => c.id !== clientId))
+      setReminders(prev => prev.filter(r => r.clientId !== clientId))
+      setIsModalOpen(false)
+    } catch (error) {
+      console.error('Error deleting client:', error)
+    }
   }
 
   // ticker for due calculation
@@ -284,7 +234,7 @@ export default function ResourceTable() {
     setNewClientForm(prev => ({ ...prev, [field]: value }))
   }
 
-  const handleAddClient = () => {
+  const handleAddClient = async () => {
     if (!newClientForm.name || !newClientForm.orderNumber || !newClientForm.startDate || !newClientForm.endDate) {
       alert('Prašome užpildyti visus privalomus laukus')
       return
@@ -320,11 +270,15 @@ export default function ResourceTable() {
       comment: ''
     }
 
-    setClients(prev => {
-      const next = [...prev, newClient]
-      try { localStorage.setItem('viadukai.clients', JSON.stringify(next)) } catch {}
-      return next
-    })
+    try {
+      const { upsertClient } = await import('../lib/supabase')
+      await upsertClient(newClient)
+      setClients(prev => [...prev, newClient])
+    } catch (error) {
+      console.error('Error adding client:', error)
+      alert('Klaida pridedant klientą')
+      return
+    }
     
     // Išvalyti formą
     setNewClientForm({
