@@ -104,3 +104,4 @@ export interface WeekData {
   shortLabel: string
   fullLabel: string
 }
+ 

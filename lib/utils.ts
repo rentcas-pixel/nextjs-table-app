@@ -122,38 +122,17 @@ export function getIntensityFrequency(intensity: string): number {
 
 // Funkcija, kuri grąžina savaites, kurios patenka į kliento datų intervalą
 export function getClientWeeks(clientStartDate: string, clientEndDate: string, allWeeks: WeekData[]): WeekData[] {
-  console.log('getClientWeeks debug:', {
-    clientStartDate,
-    clientEndDate,
-    allWeeksLength: allWeeks.length,
-    allWeeks: allWeeks.map(w => ({ id: w.id, shortLabel: w.shortLabel, startDate: w.startDate.toISOString().split('T')[0], endDate: w.endDate.toISOString().split('T')[0] }))
-  })
-  
-  if (!clientStartDate || !clientEndDate) {
-    console.log('getClientWeeks: trūksta datų')
-    return []
-  }
+  if (!clientStartDate || !clientEndDate) return []
   
   const start = new Date(clientStartDate)
   const end = new Date(clientEndDate)
   
-  console.log('getClientWeeks: datų objektai:', { start: start.toISOString(), end: end.toISOString() })
-  
-  const filteredWeeks = allWeeks.filter(week => {
+  return allWeeks.filter(week => {
     // Savaitė patenka, jei jos pradžia arba pabaiga patenka į kliento intervalą
-    const matches = (week.startDate >= start && week.startDate <= end) || 
-                   (week.endDate >= start && week.endDate <= end) ||
-                   (week.startDate <= start && week.endDate >= end)
-    
-    if (matches) {
-      console.log(`getClientWeeks: savaitė ${week.shortLabel} patenka`)
-    }
-    
-    return matches
+    return (week.startDate >= start && week.startDate <= end) || 
+           (week.endDate >= start && week.endDate <= end) ||
+           (week.startDate <= start && week.endDate >= end)
   })
-  
-  console.log('getClientWeeks: rastos savaitės:', filteredWeeks.length)
-  return filteredWeeks
 }
 
 // Funkcija, kuri grąžina savaičių reikšmes pagal intensyvumą
@@ -186,38 +165,7 @@ export function generateWeekValues(clientStartDate: string, clientEndDate: strin
   return weekValues
 }
 
-// Funkcija, kuri generuoja savaičių reikšmes iš kampanijų
-export function generateWeekValuesFromCampaigns(campaigns: Campaign[], allWeeks: WeekData[]): { [weekId: string]: number } {
-  const weekValues: { [weekId: string]: number } = {}
-  
-  if (!campaigns || campaigns.length === 0) return weekValues
-  
-  campaigns.forEach(campaign => {
-    if (!campaign.startDate || !campaign.endDate) return
-    
-    const start = new Date(campaign.startDate)
-    const end = new Date(campaign.endDate)
-    
-    const weeks = getClientWeeks(campaign.startDate, campaign.endDate, allWeeks)
-    
-    weeks.forEach(week => {
-      const intensityValue = getIntensityValue(campaign.intensity)
-      // Jei savaitė jau turi reikšmę, pridedame prie jos
-      weekValues[week.id] = (weekValues[week.id] || 0) + intensityValue
-    })
-  })
-  
-  return weekValues
-}
-
 // Tipai
-export interface Campaign {
-  id: string
-  startDate: string
-  endDate: string
-  intensity: string
-}
-
 export interface WeekData {
   id: string
   weekNumber: number

@@ -34,14 +34,7 @@ export async function uploadFilesToBucket(bucket: string, clientId: string, file
 }
 
 // ----- Database helpers (optional, used when Supabase is enabled) -----
-export type Campaign = {
-  id: string
-  startDate: string
-  endDate: string
-  intensity: string
-}
-
-export interface ClientRecord {
+export type ClientRecord = {
   id: string
   name: string
   status: 'Patvirtinta' | 'Rezervuota' | 'Atšaukta'
@@ -49,13 +42,8 @@ export interface ClientRecord {
   startDate: string
   endDate: string
   intensity: string
-  weeks: { [weekId: string]: number }
-  hasWarning?: boolean
   comment?: string
-  files?: { name: string; size: number }[]
-  createdAt?: string
-  updatedAt?: string
-  campaigns?: Campaign[]
+  files?: { name: string; size: number; url?: string }[]
 }
 
 export type ReminderRecord = {
@@ -75,7 +63,6 @@ function toDbClient(c: ClientRecord): any {
     startdate: c.startDate,
     enddate: c.endDate,
     intensity: c.intensity,
-    campaigns: c.campaigns ?? [],
     comment: c.comment ?? null,
     files: c.files ?? null,
   }
@@ -89,9 +76,6 @@ function fromDbClient(row: any): ClientRecord {
     startDate: row.startdate ?? row.startDate ?? '',
     endDate: row.enddate ?? row.endDate ?? '',
     intensity: row.intensity,
-    weeks: row.weeks ?? {},
-    hasWarning: row.haswarning ?? row.hasWarning ?? false,
-    campaigns: row.campaigns ?? [],
     comment: row.comment ?? '',
     files: row.files ?? [],
   }

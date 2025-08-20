@@ -6,13 +6,6 @@ import { generateWeeks, getCurrentWeekStart, getClientWeeks } from '../lib/utils
 import { isSupabaseEnabled, uploadFilesToBucket, supabase } from '../lib/supabase'
 import AlertDialog from './ui/alert-dialog'
 
-interface Campaign {
-  id: string
-  startDate: string
-  endDate: string
-  intensity: string
-}
-
 interface TaskDetailModalProps {
 	isOpen?: boolean
 	onClose?: () => void
@@ -21,12 +14,12 @@ interface TaskDetailModalProps {
 	task: any
 	onSaveReminder?: (remindAt: string, message: string) => void
 	currentReminder?: { remindAt: string; message: string } | undefined
-  onSaveDetails?: (payload: { id: string; name?: string; status?: 'Patvirtinta' | 'Rezervuota' | 'Atšaukta'; orderNumber?: string; intensity?: string; startDate?: string; endDate?: string; comment?: string; files?: { name: string; size: number }[]; campaigns?: Campaign[]; weeks?: { [weekId: string]: number } }) => void
+  onSaveDetails?: (payload: { id: string; name?: string; status?: 'Patvirtinta' | 'Rezervuota' | 'Atšaukta'; orderNumber?: string; intensity?: string; startDate?: string; endDate?: string; comment?: string; files?: { name: string; size: number }[] }) => void
   onDelete?: (clientId: string) => void
 }
 
 export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen, onOpenChange, task, onSaveReminder, currentReminder, onSaveDetails, onDelete }: TaskDetailModalProps) {
-  const safeTask = task ?? { id: '', name: '', status: 'Patvirtinta' as 'Patvirtinta' | 'Rezervuota' | 'Atšaukta', orderNumber: '', intensity: 'kas 1 (100%)', startDate: '', endDate: '', comment: '', files: [], weeks: {} }
+  const safeTask = task ?? { id: '', name: '', status: 'Patvirtinta', orderNumber: '', intensity: 'kas 1 (100%)', startDate: '', endDate: '', comment: '', files: [] }
 
   const allWeeks = useMemo(() => {
     const start = getCurrentWeekStart()
@@ -43,8 +36,6 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
   const [startDate, setStartDate] = useState<string>(safeTask.startDate)
   const [endDate, setEndDate] = useState<string>(safeTask.endDate)
   const [comment, setComment] = useState<string>(safeTask.comment || '')
-  const [campaigns, setCampaigns] = useState<Campaign[]>(safeTask.campaigns || [])
-  const [weeks, setWeeks] = useState<{ [weekId: string]: number }>(safeTask.weeks || {})
   const [files, setFiles] = useState<{ name: string; size: number; url?: string }[]>(safeTask.files || [])
   const [previews, setPreviews] = useState<{ name: string; src: string }[]>([])
   const [lightbox, setLightbox] = useState<string | null>(null)
@@ -63,8 +54,6 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
     setStartDate(safeTask.startDate)
     setEndDate(safeTask.endDate)
     setComment(safeTask.comment || '')
-    setCampaigns(safeTask.campaigns || [])
-    setWeeks(safeTask.weeks || {})
     setFiles(safeTask.files || [])
     try {
       const key = `viadukai.filePreviews.${safeTask.id}`
@@ -206,30 +195,6 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
     setPendingUploads(prev => prev.filter(p => p.name !== nameToRemove))
   }
 
-  const addCampaign = () => {
-    const newCampaign: Campaign = {
-      id: Date.now().toString(),
-      startDate: '',
-      endDate: '',
-      intensity: 'kas 4 (25%)'
-    }
-    setCampaigns(prev => [...prev, newCampaign])
-  }
-
-  const removeCampaign = (campaignId: string) => {
-    setCampaigns(prev => prev.filter(c => c.id !== campaignId))
-  }
-
-  const updateCampaign = (campaignId: string, field: keyof Campaign, value: string) => {
-    setCampaigns(prev => prev.map(c => 
-      c.id === campaignId ? { ...c, [field]: value } : c
-    ))
-  }
-
-  const updateWeek = (weekId: string, value: number) => {
-    setWeeks(prev => ({ ...prev, [weekId]: value }))
-  }
-
   const handleSave = async () => {
     if (!safeTask.id) return handleClose()
     // Upload to Supabase if configured
@@ -263,9 +228,7 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
       startDate,
       endDate,
       comment,
-      files,
-      campaigns,
-      weeks
+      files
     })
     if (onSaveReminder) {
       onSaveReminder(remindAt, reminderMsg)
@@ -353,11 +316,7 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Statusas</label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as 'Patvirtinta' | 'Rezervuota' | 'Atšaukta')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
+              <select value={status} onChange={e => setStatus(e.target.value as any)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="Patvirtinta">Patvirtinta</option>
                 <option value="Rezervuota">Rezervuota</option>
                 <option value="Atšaukta">Atšaukta</option>
@@ -390,72 +349,6 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Komentaras</label>
               <textarea value={comment} onChange={e => setComment(e.target.value)} rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-
-            <div className="md:col-span-2">
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700">Kampanijos</label>
-                <button 
-                  type="button" 
-                  onClick={addCampaign}
-                  className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-                >
-                  + Pridėti kampaniją
-                </button>
-              </div>
-              <div className="space-y-3">
-                {campaigns.map((campaign, index) => (
-                  <div key={campaign.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-700">Kampanija {index + 1}</span>
-                      {campaigns.length > 1 && (
-                        <button 
-                          type="button" 
-                          onClick={() => removeCampaign(campaign.id)}
-                          className="text-red-600 hover:text-red-800 text-sm"
-                        >
-                          Pašalinti
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Data nuo</label>
-                        <input 
-                          type="date" 
-                          lang="en-CA"
-                          value={campaign.startDate} 
-                          onChange={e => updateCampaign(campaign.id, 'startDate', e.target.value)} 
-                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500" 
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Data iki</label>
-                        <input 
-                          type="date" 
-                          lang="en-CA"
-                          value={campaign.endDate} 
-                          min={campaign.startDate || undefined}
-                          onChange={e => updateCampaign(campaign.id, 'endDate', e.target.value)} 
-                          className="w-full px-2 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500" 
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Intensyvumas</label>
-                        <select 
-                          value={campaign.intensity} 
-                          onChange={e => updateCampaign(campaign.id, 'intensity', e.target.value)} 
-                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        >
-                          <option value="kas 4 (25%)">Kas 4</option>
-                          <option value="kas 2 (50%)">Kas 2</option>
-                          <option value="kas 1 (100%)">Kas 1</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
 
             <div className="md:col-span-2">
@@ -499,101 +392,6 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
                 <div className="text-sm text-gray-600">Savaitės: <span className="font-medium text-gray-800">{weekLabel || '—'}</span></div>
               </div>
             </div>
-
-            <div className="md:col-span-2">
-              <div className="rounded-md border border-gray-200 bg-gray-50 p-3 mb-3">
-                <div className="text-sm text-gray-600 mb-1">Debug informacija:</div>
-                <div className="text-xs text-gray-500 space-y-1">
-                  <div>• allWeeks: {allWeeks.length} savaičių</div>
-                  <div>• clientWeeks: {clientWeeks.length} savaičių</div>
-                  <div>• startDate: {startDate || 'nėra'}</div>
-                  <div>• endDate: {endDate || 'nėra'}</div>
-                  <div>• weeks state: {Object.keys(weeks).length} reikšmių</div>
-                </div>
-              </div>
-            </div>
-
-            {clientWeeks.length > 0 && (
-              <div className="md:col-span-2">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700">Savaičių intensyvumas</label>
-                  <div className="text-xs text-gray-500 mb-2">
-                    Debug: {clientWeeks.length} savaitės, {Object.keys(weeks).length} reikšmių
-                  </div>
-                  <div className="flex gap-2">
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        const newWeeks: { [weekId: string]: number } = {}
-                        clientWeeks.forEach(week => { newWeeks[week.id] = 40 })
-                        setWeeks(newWeeks)
-                      }}
-                      className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
-                    >
-                      Kas 1
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        const newWeeks: { [weekId: string]: number } = {}
-                        clientWeeks.forEach(week => { newWeeks[week.id] = 20 })
-                        setWeeks(newWeeks)
-                      }}
-                      className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
-                    >
-                      Kas 2
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        const newWeeks: { [weekId: string]: number } = {}
-                        clientWeeks.forEach(week => { newWeeks[week.id] = 10 })
-                        setWeeks(newWeeks)
-                      }}
-                      className="px-2 py-1 text-xs bg-yellow-600 text-white rounded hover:bg-yellow-700"
-                    >
-                      Kas 4
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        const newWeeks: { [weekId: string]: number } = {}
-                        clientWeeks.forEach(week => { newWeeks[week.id] = 0 })
-                        setWeeks(newWeeks)
-                      }}
-                      className="px-2 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700"
-                    >
-                      Išvalyti
-                    </button>
-                  </div>
-                </div>
-                <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                  <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
-                    {clientWeeks.map((week) => (
-                      <div key={week.id} className="text-center">
-                        <div className="text-xs text-gray-600 mb-1 font-medium">{week.shortLabel}</div>
-                        <div className="text-xs text-gray-500 mb-1">
-                          {week.startDate.toLocaleDateString('lt-LT', { day: '2-digit', month: '2-digit' })}
-                        </div>
-                        <input
-                          type="number"
-                          min="0"
-                          max="160"
-                          step="10"
-                          value={weeks[week.id] || 0}
-                          onChange={(e) => updateWeek(week.id, parseInt(e.target.value) || 0)}
-                          className="w-full px-1 py-1 text-xs text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          placeholder="0"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 text-xs text-gray-500">
-                    Intensyvumas: 0 = neveikia, 10 = kas 4, 20 = kas 2, 40 = kas 1
-                  </div>
-                </div>
-              </div>
-            )}
 
             <div className="md:col-span-2 border-t pt-3">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
