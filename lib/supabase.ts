@@ -53,6 +53,16 @@ export type ReminderRecord = {
   message: string
 }
 
+export interface WaitingListClient {
+  id: string
+  name: string
+  email: string
+  phone: string
+  desiredPeriod: string
+  notes: string
+  createdAt: string
+}
+
 // Helpers to map camelCase <-> snake/lowercase columns
 function toDbClient(c: ClientRecord): any {
   return {
@@ -156,4 +166,56 @@ export async function deleteRemindersByClient(clientId: string): Promise<void> {
   }
 }
 
+// Waiting List functions
+function toDbWaitingList(w: WaitingListClient): any {
+  return {
+    id: w.id,
+    name: w.name,
+    email: w.email,
+    phone: w.phone,
+    desired_period: w.desiredPeriod,
+    notes: w.notes,
+    created_at: w.createdAt,
+  }
+}
 
+function fromDbWaitingList(row: any): WaitingListClient {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    phone: row.phone,
+    desiredPeriod: row.desired_period ?? row.desiredPeriod ?? '',
+    notes: row.notes,
+    createdAt: row.created_at ?? row.createdAt ?? '',
+  }
+}
+
+export async function fetchWaitingList(): Promise<WaitingListClient[]> {
+  if (!isSupabaseEnabled) return []
+  let { data, error } = await supabase.from('waiting_list').select('*')
+  if (error) {
+    const { data: dataAlt, error: errAlt } = await supabase.from('Waiting_List' as any).select('*')
+    if (errAlt) throw errAlt
+    return (dataAlt || []).map(fromDbWaitingList)
+  }
+  return (data || []).map(fromDbWaitingList)
+}
+
+export async function upsertWaitingListClient(client: WaitingListClient): Promise<void> {
+  if (!isSupabaseEnabled) return
+  let { error } = await supabase.from('waiting_list').upsert(toDbWaitingList(client), { onConflict: 'id' })
+  if (error) {
+    const { error: errAlt } = await supabase.from('Waiting_List' as any).upsert(toDbWaitingList(client), { onConflict: 'id' })
+    if (errAlt) throw errAlt
+  }
+}
+
+export async function deleteWaitingListClient(clientId: string): Promise<void> {
+  if (!isSupabaseEnabled) return
+  let { error } = await supabase.from('waiting_list').delete().eq('id', clientId)
+  if (error) {
+    const { error: errAlt } = await supabase.from('Waiting_List' as any).delete().eq('id', clientId)
+    if (errAlt) throw errAlt
+  }
+}

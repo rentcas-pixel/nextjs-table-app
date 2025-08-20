@@ -2,16 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
-
-interface WaitingListClient {
-  id: string
-  name: string
-  email: string
-  phone: string
-  desiredPeriod: string
-  notes: string
-  createdAt: string
-}
+import { fetchWaitingList, upsertWaitingListClient, deleteWaitingListClient, WaitingListClient } from '../lib/supabase'
 
 interface WaitingListModalProps {
   open: boolean
@@ -28,11 +19,27 @@ export default function WaitingListModal({ open, onOpenChange }: WaitingListModa
     notes: ''
   })
 
+  // Load waiting list data when modal opens
+  useEffect(() => {
+    if (open) {
+      loadWaitingList()
+    }
+  }, [open])
+
+  const loadWaitingList = async () => {
+    try {
+      const data = await fetchWaitingList()
+      setClients(data)
+    } catch (error) {
+      console.error('Error loading waiting list:', error)
+    }
+  }
+
   const handleClose = () => {
     onOpenChange(false)
   }
 
-  const handleAddClient = () => {
+  const handleAddClient = async () => {
     if (!newClient.name || !newClient.email) {
       alert('Prašome užpildyti kliento pavadinimą ir emailą')
       return
@@ -44,18 +51,30 @@ export default function WaitingListModal({ open, onOpenChange }: WaitingListModa
       createdAt: new Date().toISOString()
     }
 
-    setClients(prev => [...prev, client])
-    setNewClient({
-      name: '',
-      email: '',
-      phone: '',
-      desiredPeriod: '',
-      notes: ''
-    })
+    try {
+      await upsertWaitingListClient(client)
+      setClients(prev => [...prev, client])
+      setNewClient({
+        name: '',
+        email: '',
+        phone: '',
+        desiredPeriod: '',
+        notes: ''
+      })
+    } catch (error) {
+      console.error('Error adding client to waiting list:', error)
+      alert('Klaida pridedant klientą į waiting listą')
+    }
   }
 
-  const handleDeleteClient = (id: string) => {
-    setClients(prev => prev.filter(c => c.id !== id))
+  const handleDeleteClient = async (id: string) => {
+    try {
+      await deleteWaitingListClient(id)
+      setClients(prev => prev.filter(c => c.id !== id))
+    } catch (error) {
+      console.error('Error deleting client from waiting list:', error)
+      alert('Klaida ištrinant klientą iš waiting listo')
+    }
   }
 
   const handleFormChange = (field: keyof typeof newClient, value: string) => {
