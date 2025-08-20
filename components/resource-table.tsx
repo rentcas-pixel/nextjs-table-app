@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { isSupabaseEnabled, fetchClients as sbFetchClients, upsertClient as sbUpsertClient, deleteClientById as sbDeleteClient, fetchReminders as sbFetchReminders, upsertReminder as sbUpsertReminder, deleteRemindersByClient as sbDeleteReminders } from '../lib/supabase'
 import TaskDetailModal from './task-detail-modal'
+import WaitingListModal from './waiting-list-modal'
 import { generateWeeks, getCurrentWeekStart, WeekData, generateWeekValues } from '../lib/utils'
 
 interface ClientData {
@@ -115,6 +116,7 @@ const DEFAULT_CLIENTS: ClientData[] = [
 export default function ResourceTable() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedTask, setSelectedTask] = useState<ClientData | null>(null)
+  const [isWaitingListOpen, setIsWaitingListOpen] = useState(false)
   const [clients, setClients] = useState<ClientData[]>([])
 
   const [newClientForm, setNewClientForm] = useState<NewClientForm>({
@@ -585,12 +587,21 @@ export default function ResourceTable() {
               <option value="kas 1 (100%)">Kas 1</option>
             </select>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <button 
               onClick={handleAddClient}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap"
             >
               + Pridėti
+            </button>
+            
+            {/* Waiting List mygtukas */}
+            <button 
+              onClick={() => setIsWaitingListOpen(true)}
+              className="w-12 h-12 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xl transition-colors"
+              title="Waiting List - klientai, kurie laukia vietos"
+            >
+              ❓
             </button>
           </div>
         </div>
@@ -717,6 +728,12 @@ export default function ResourceTable() {
         currentReminder={selectedTask ? getReminder(selectedTask.id) : undefined}
         onSaveDetails={(payload) => saveClientDetails(payload)}
         onDelete={(clientId: string) => deleteClient(clientId)}
+      />
+      
+      {/* Waiting List Modal */}
+      <WaitingListModal
+        open={isWaitingListOpen}
+        onOpenChange={(v) => setIsWaitingListOpen(v)}
       />
     </div>
   )
