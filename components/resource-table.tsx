@@ -338,11 +338,13 @@ export default function ResourceTable() {
     return found || null
   }
 
-  // Skaičiuoti sumas kiekvienai savaitei
+  // Skaičiuoti sumas kiekvienai savaitei (išskyrus "Atšaukta" statuso klientus)
   const weekSums = useMemo(() => {
     const sums: { [weekId: string]: number } = {}
     weeks.forEach(week => {
-      sums[week.id] = clientsWithCalculatedWeeks.reduce((sum, client) => sum + (client.weeks[week.id] || 0), 0)
+      sums[week.id] = clientsWithCalculatedWeeks
+        .filter(client => client.status !== 'Atšaukta') // Neįtraukti atšauktų klientų
+        .reduce((sum, client) => sum + (client.weeks[week.id] || 0), 0)
     })
     return sums
   }, [clientsWithCalculatedWeeks, weeks])
