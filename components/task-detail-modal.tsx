@@ -77,7 +77,13 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
 
   // Atnaujinti modalą kai task keičiasi (po išsaugojimo)
   useEffect(() => {
+    console.log('🔧 TaskDetailModal: task prop changed to:', task)
     if (task) {
+      console.log('🔧 TaskDetailModal: updating internal state with:', {
+        name: task.name,
+        startDate: task.startDate,
+        endDate: task.endDate
+      })
       setName(task.name)
       setStatus(task.status)
       setOrderNumber(task.orderNumber)

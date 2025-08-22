@@ -469,6 +469,11 @@ export default function ResourceTable() {
   // Reset page when filters change
   useEffect(() => { if (page > totalPages) setPage(totalPages) }, [totalPages, page])
 
+  // Debug: klausytis selectedTask pakeitimų
+  useEffect(() => {
+    console.log('🔧 selectedTask changed to:', selectedTask)
+  }, [selectedTask])
+
   // Keyboard shortcuts for debugging
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -751,7 +756,9 @@ export default function ResourceTable() {
           console.log('🔧 onSaveDetails called with payload:', payload)
           saveClientDetails(payload, (updatedClient) => {
             console.log('🔧 Callback received updatedClient:', updatedClient)
+            console.log('🔧 Previous selectedTask:', selectedTask)
             setSelectedTask(updatedClient)
+            console.log('🔧 Setting selectedTask to:', updatedClient)
           })
         }}
         onDelete={(clientId: string) => deleteClient(clientId)}
