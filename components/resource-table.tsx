@@ -241,15 +241,13 @@ export default function ResourceTable() {
     endDate?: string
     comment?: string
     files?: { name: string; size: number }[]
-  }) => {
+  }, onComplete?: (updatedClient: ClientData) => void) => {
     console.log('🔧 saveClientDetails called with:', update)
-    
-    let updatedClient: ClientData | undefined
     
     setClients(prev => {
       const next = prev.map(c => {
         if (c.id === update.id) {
-          updatedClient = {
+          const updatedClient = {
             ...c,
             name: update.name ?? c.name,
             status: update.status ?? c.status,
@@ -271,6 +269,11 @@ export default function ResourceTable() {
             sbUpsertClient(updatedClient as any).catch(() => {})
           }
           
+          // Iškart iškviesti callback'ą su atnaujintu client'u
+          if (onComplete) {
+            onComplete(updatedClient)
+          }
+          
           return updatedClient
         }
         return c
@@ -284,9 +287,6 @@ export default function ResourceTable() {
       console.log('🔧 Updated clients state:', next)
       return next
     })
-    
-    // Grąžinti atnaujintą client'ą
-    return updatedClient
   }
 
   const deleteClient = async (clientId: string) => {
@@ -748,11 +748,11 @@ export default function ResourceTable() {
         }}
         currentReminder={selectedTask ? getReminder(selectedTask.id) : undefined}
         onSaveDetails={(payload) => {
-          const updatedClient = saveClientDetails(payload)
-          // Iškart atnaujinti selectedTask su naujais duomenimis
-          if (updatedClient) {
+          console.log('🔧 onSaveDetails called with payload:', payload)
+          saveClientDetails(payload, (updatedClient) => {
+            console.log('🔧 Callback received updatedClient:', updatedClient)
             setSelectedTask(updatedClient)
-          }
+          })
         }}
         onDelete={(clientId: string) => deleteClient(clientId)}
       />
