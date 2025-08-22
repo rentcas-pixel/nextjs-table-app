@@ -525,16 +525,19 @@ export default function ResourceTable() {
     console.log('🔧 selectedTask changed to:', selectedTask)
   }, [selectedTask])
 
-  // Keyboard shortcuts for debugging
+  // Keyboard shortcuts for debugging (disabled when modal is open)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Neveikia kai modal'as atidarytas
+      if (isModalOpen) return
+      
       if (e.key.toLowerCase() === 'm') {
         if (filteredAndSortedClients[0]) openModal(filteredAndSortedClients[0])
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [filteredAndSortedClients])
+  }, [filteredAndSortedClients, isModalOpen])
 
   if (!hydrated) {
     return (
