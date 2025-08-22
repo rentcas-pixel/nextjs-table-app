@@ -124,6 +124,11 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
     } catch {}
   }, [previews, safeTask.id, fileUrls])
 
+  // Debug: klausytis previews pakeitimų
+  useEffect(() => {
+    console.log('🔧 TaskDetailModal: previews changed to:', previews)
+  }, [previews])
+
   const todayStr = new Date().toISOString().split('T')[0]
 
   const daysLeft = useMemo(() => {
@@ -308,11 +313,15 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
       console.log('🔧 handlePaste: newPreviews:', newPreviews)
       
       setFiles(prev => [...prev, ...newFiles])
-      setPreviews(prev => {
-        const next = [...prev, ...newPreviews]
-        console.log('🔧 handlePaste: setting previews to:', next)
-        return next
-      })
+      
+      // Force re-render su setTimeout
+      setTimeout(() => {
+        setPreviews(prev => {
+          const next = [...prev, ...newPreviews]
+          console.log('🔧 handlePaste: setting previews to (with timeout):', next)
+          return next
+        })
+      }, 100)
     } catch (error) {
       console.error('🔧 handlePaste error:', error)
     }
