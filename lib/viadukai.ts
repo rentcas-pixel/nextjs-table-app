@@ -93,15 +93,6 @@ export function getWeekRange(startDate: Date, endDate: Date): WeekData[] {
   return weeks
 }
 
-// Tipai
-export interface WeekData {
-  id: string
-  weekNumber: number
-  year: number
-  startDate: Date
-  endDate: Date
-  label: string
-  shortLabel: string
-  fullLabel: string
-}
+// WeekData tipas importuojamas iš lib/utils.ts
+export type { WeekData } from './utils'
  
