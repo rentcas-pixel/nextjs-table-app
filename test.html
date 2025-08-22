@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="lt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test - Suskleidžiama forma</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen p-8">
+    <div class="max-w-2xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">Test - Suskleidžiama forma</h1>
+        
+        <!-- Mygtukas -->
+        <button id="toggleBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg mb-4">
+            Atidaryti formą
+        </button>
+        
+        <!-- Forma - PAGAL NUTYLĖJIMĄ PASLĖPTA -->
+        <div id="testForm" class="bg-white p-6 rounded-lg shadow-lg hidden">
+            <h2 class="text-lg font-semibold mb-4">Test forma</h2>
+            <p class="text-gray-600 mb-4">Ši forma turėtų būti paslėpta pagal nutylėjimą!</p>
+            <input type="text" placeholder="Test laukas" class="w-full px-3 py-2 border rounded-lg mb-4">
+            <button id="closeBtn" class="px-4 py-2 bg-red-600 text-white rounded-lg">Uždaryti</button>
+        </div>
+        
+        <!-- Statusas -->
+        <div class="mt-4 p-4 bg-gray-100 rounded-lg">
+            <p><strong>Formos būsena:</strong> <span id="status">Paslėpta</span></p>
+            <p><strong>Formos klasės:</strong> <span id="classes">hidden</span></p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const toggleBtn = document.getElementById('toggleBtn');
+            const testForm = document.getElementById('testForm');
+            const closeBtn = document.getElementById('closeBtn');
+            const status = document.getElementById('status');
+            const classes = document.getElementById('classes');
+            
+            function updateStatus() {
+                const isHidden = testForm.classList.contains('hidden');
+                status.textContent = isHidden ? 'Paslėpta' : 'Matoma';
+                classes.textContent = testForm.className;
+            }
+            
+            toggleBtn.addEventListener('click', function() {
+                if (testForm.classList.contains('hidden')) {
+                    testForm.classList.remove('hidden');
+                    toggleBtn.textContent = 'Uždaryti formą';
+                    toggleBtn.classList.remove('bg-blue-600');
+                    toggleBtn.classList.add('bg-gray-600');
+                } else {
+                    testForm.classList.add('hidden');
+                    toggleBtn.textContent = 'Atidaryti formą';
+                    toggleBtn.classList.remove('bg-gray-600');
+                    toggleBtn.classList.add('bg-blue-600');
+                }
+                updateStatus();
+            });
+            
+            closeBtn.addEventListener('click', function() {
+                testForm.classList.add('hidden');
+                toggleBtn.textContent = 'Atidaryti formą';
+                toggleBtn.classList.remove('bg-gray-600');
+                toggleBtn.classList.add('bg-blue-600');
+                updateStatus();
+            });
+            
+            updateStatus();
+        });
+    </script>
+</body>
+</html>
+

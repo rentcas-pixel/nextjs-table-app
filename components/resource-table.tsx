@@ -213,6 +213,8 @@ export default function ResourceTable() {
     status?: 'Patvirtinta' | 'Rezervuota' | 'Atšaukta'
     orderNumber?: string
     intensity?: string
+    startDate?: string
+    endDate?: string
     comment?: string
     files?: { name: string; size: number }[]
   }) => {
@@ -231,8 +233,27 @@ export default function ResourceTable() {
         status: update.status ?? c.status,
         orderNumber: update.orderNumber ?? c.orderNumber,
         intensity: normalizeIntensity(update.intensity) ?? c.intensity,
+        startDate: update.startDate ?? c.startDate,
+        endDate: update.endDate ?? c.endDate,
         comment: update.comment ?? c.comment,
-        files: update.files ?? c.files
+        files: update.files ?? c.files,
+        // Automatiškai perskaičiuoti savaičių reikšmes po datų ar intensyvumo pakeitimo
+        weeks: generateWeekValues(
+          update.startDate ?? c.startDate, 
+          update.endDate ?? c.endDate, 
+          normalizeIntensity(update.intensity) ?? c.intensity, 
+          weeks
+        ),
+        // Atnaujinti warning statusą po datų pakeitimo
+        hasWarning: (() => {
+          if ((update.status ?? c.status) !== 'Rezervuota' || !(update.startDate ?? c.startDate)) return false
+          const today = new Date()
+          const start = new Date(update.startDate ?? c.startDate)
+          today.setHours(0,0,0,0)
+          start.setHours(0,0,0,0)
+          const diffDays = Math.floor((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+          return diffDays >= 0 && diffDays <= 14
+        })()
       } : c)
       
       // Save to Supabase if enabled
