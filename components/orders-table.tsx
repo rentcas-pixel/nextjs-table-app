@@ -89,7 +89,7 @@ export default function OrdersTable() {
 
       <div className="mt-6 p-4 bg-blue-50 rounded-lg">
         <p className="text-blue-800">
-          <strong>Test versija sėkmingai veikia!</strong> Server'is paleistas ir komponentas rodomas.
+          <strong>Test versija sėkmingai veikia!</strong> Serveris paleistas ir komponentas rodomas.
         </p>
       </div>
     </div>
