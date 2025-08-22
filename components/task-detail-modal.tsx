@@ -317,7 +317,7 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
             setFileUrls(prev => ({ ...prev, [name]: base64 }))
             setPendingUploads(prev => [...prev, { name, file }])
             
-            // Iškart išsaugoti į localStorage
+            // Iškart išsaugoti į localStorage (backup)
             if (safeTask.id) {
               try {
                 const key = `viadukai.filePreviews.${safeTask.id}`
@@ -329,6 +329,28 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
               } catch (error) {
                 console.error('🔧 handlePaste: failed to save to localStorage:', error)
               }
+            }
+            
+            // Iškart išsaugoti į Supabase Storage (jei įjungtas)
+            if (isSupabaseEnabled && safeTask.id) {
+              uploadFilesToBucket('uploads', safeTask.id, [{ name, file }])
+                .then(uploaded => {
+                  if (uploaded.length > 0) {
+                    const uploadedFile = uploaded[0]
+                    console.log('🔧 handlePaste: uploaded to Supabase:', uploadedFile)
+                    
+                    // Atnaujinti previews su public URL
+                    setPreviews(prev => prev.map(p => 
+                      p.name === name ? { ...p, src: uploadedFile.url } : p
+                    ))
+                    
+                    // Atnaujinti fileUrls su public URL
+                    setFileUrls(prev => ({ ...prev, [name]: uploadedFile.url }))
+                  }
+                })
+                .catch(error => {
+                  console.error('🔧 handlePaste: failed to upload to Supabase:', error)
+                })
             }
           }
         }
