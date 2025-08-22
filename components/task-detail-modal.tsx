@@ -275,6 +275,7 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
 
   const handlePaste = (e: ClipboardEvent) => {
     try {
+      console.log('🔧 handlePaste called')
       const dt = e.clipboardData
       if (!dt) return
       const items = dt.items ? Array.from(dt.items) : []
@@ -288,6 +289,8 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
       if (files.length === 0) return
       e.preventDefault()
 
+      console.log('🔧 handlePaste: found files:', files)
+
       const newFiles: { name: string; size: number }[] = []
       const newPreviews: { name: string; src: string }[] = []
       files.forEach((file, idx) => {
@@ -300,9 +303,19 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
         setFileUrls(prev => ({ ...prev, [name]: src }))
         setPendingUploads(prev => [...prev, { name, file }])
       })
+      
+      console.log('🔧 handlePaste: newFiles:', newFiles)
+      console.log('🔧 handlePaste: newPreviews:', newPreviews)
+      
       setFiles(prev => [...prev, ...newFiles])
-      setPreviews(prev => [...prev, ...newPreviews])
-    } catch {}
+      setPreviews(prev => {
+        const next = [...prev, ...newPreviews]
+        console.log('🔧 handlePaste: setting previews to:', next)
+        return next
+      })
+    } catch (error) {
+      console.error('🔧 handlePaste error:', error)
+    }
   }
 
   useEffect(() => {
@@ -409,6 +422,9 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
               )}
               {(previews?.length || 0) > 0 && (
                 <div className="mt-3 grid grid-cols-3 gap-2">
+                  <div className="col-span-3 text-xs text-gray-500 mb-2">
+                    Debug: {previews.length} previews loaded
+                  </div>
                   {previews.map(p => (
                     <div key={p.name} className="relative">
                       <button type="button" className="block w-full" onClick={(e) => { e.stopPropagation(); if (Date.now() - openedAtRef.current < 300) return; setLightbox(p.src) }}>
