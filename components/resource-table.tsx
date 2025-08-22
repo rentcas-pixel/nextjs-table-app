@@ -244,10 +244,12 @@ export default function ResourceTable() {
   }) => {
     console.log('🔧 saveClientDetails called with:', update)
     
+    let updatedClient: ClientData | undefined
+    
     setClients(prev => {
       const next = prev.map(c => {
         if (c.id === update.id) {
-          const updatedClient = {
+          updatedClient = {
             ...c,
             name: update.name ?? c.name,
             status: update.status ?? c.status,
@@ -282,6 +284,9 @@ export default function ResourceTable() {
       console.log('🔧 Updated clients state:', next)
       return next
     })
+    
+    // Grąžinti atnaujintą client'ą
+    return updatedClient
   }
 
   const deleteClient = async (clientId: string) => {
@@ -743,18 +748,10 @@ export default function ResourceTable() {
         }}
         currentReminder={selectedTask ? getReminder(selectedTask.id) : undefined}
         onSaveDetails={(payload) => {
-          saveClientDetails(payload)
-          // Atnaujinti selectedTask su naujais duomenimis
-          if (selectedTask) {
-            const updatedTask = {
-              ...selectedTask,
-              ...payload,
-              hasWarning: isWarningClient({
-                ...selectedTask,
-                ...payload
-              })
-            }
-            setSelectedTask(updatedTask)
+          const updatedClient = saveClientDetails(payload)
+          // Iškart atnaujinti selectedTask su naujais duomenimis
+          if (updatedClient) {
+            setSelectedTask(updatedClient)
           }
         }}
         onDelete={(clientId: string) => deleteClient(clientId)}
