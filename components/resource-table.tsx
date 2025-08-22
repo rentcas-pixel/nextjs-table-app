@@ -33,7 +33,7 @@ interface Reminder {
   id: string
   clientId: string
   message: string
-  remindAt: string // YYYY-MM-DD
+  remindAt: string
 }
 
 const DEFAULT_CLIENTS: ClientData[] = [
@@ -104,21 +104,25 @@ const DEFAULT_CLIENTS: ClientData[] = [
     endDate: '2025-08-24',
     intensity: 'kas 1 (100%)',
     weeks: {
-      'W-34': 280,  // >= 240 - raudonas fonas!
-      'W-35': 260,  // >= 240 - raudonas fonas!
-      'W-36': 220,  // < 240 - paprastas
-      'W-37': 300,  // >= 240 - raudonas fonas!
+      'W-34': 280,
+      'W-35': 260,
+      'W-36': 220,
+      'W-37': 300,
     },
     comment: 'Testas raudonam fonui'
   }
 ]
 
 export default function ResourceTable() {
+  // State management
+  const [clients, setClients] = useState<ClientData[]>([])
+  const [reminders, setReminders] = useState<Reminder[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedTask, setSelectedTask] = useState<ClientData | null>(null)
   const [isWaitingListOpen, setIsWaitingListOpen] = useState(false)
-  const [clients, setClients] = useState<ClientData[]>([])
+  const [hydrated, setHydrated] = useState(false)
 
+  // Form state
   const [newClientForm, setNewClientForm] = useState<NewClientForm>({
     name: '',
     status: 'Patvirtinta',
@@ -128,76 +132,67 @@ export default function ResourceTable() {
     intensity: 'kas 4 (25%)'
   })
 
-  // Search
+  // Filter and search state
   const [searchQuery, setSearchQuery] = useState<string>('')
-  // Advanced filters
   const [statusFilter, setStatusFilter] = useState<'All' | 'Patvirtinta' | 'Rezervuota' | 'Atšaukta'>('All')
   const [dateFromFilter, setDateFromFilter] = useState<string>('')
   const [dateToFilter, setDateToFilter] = useState<string>('')
-  // Sorting
   const [sortBy, setSortBy] = useState<'name' | 'orderNumber' | 'startDate' | 'endDate' | 'status'>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
-  // Pagination
+
+  // Pagination state
   const [page, setPage] = useState<number>(1)
   const [pageSize, setPageSize] = useState<number>(10)
 
-  // Reminders managed from modal
-  const [reminders, setReminders] = useState<Reminder[]>([])
-  const saveReminder = (clientId: string, remindAt: string, message: string) => {
-    setReminders(prev => {
-      // remove if empty date
-      if (!remindAt) {
-        return prev.filter(r => r.clientId !== clientId)
-      }
-      const existing = prev.find(r => r.clientId === clientId)
-      if (existing) {
-        return prev.map(r => r.clientId === clientId ? { ...r, remindAt, message } : r)
-      }
-      return [...prev, { id: `r-${clientId}-${Date.now()}`, clientId, remindAt, message }]
-    })
-  }
-  const getReminder = (clientId: string) => reminders.find(r => r.clientId === clientId)
+  // Timer for warnings
+  const [nowTick, setNowTick] = useState<number>(Date.now())
 
-  const [hydrated, setHydrated] = useState(false)
-  // Load persisted data on mount (avoid SSR mismatch)
+  // Generate weeks
+  const weeks = useMemo(() => {
+    const currentWeekStart = getCurrentWeekStart()
+    return generateWeeks(currentWeekStart, 20)
+  }, [])
+
+  // Load data on mount
   useEffect(() => {
-    (async () => {
+    const loadData = async () => {
       try {
-        console.log('🔍 isSupabaseEnabled:', isSupabaseEnabled)
         if (isSupabaseEnabled) {
-          console.log('📡 Fetching from Supabase...')
           const [c, r] = await Promise.all([sbFetchClients(), sbFetchReminders()])
-          console.log('📊 Supabase clients:', c)
-          console.log('📊 Supabase reminders:', r)
           if (Array.isArray(c) && c.length) {
-            console.log('✅ Setting clients from Supabase')
             setClients(c as any)
           } else {
-            console.log('⚠️ No clients from Supabase, starting empty')
-            setClients([])
+            setClients(DEFAULT_CLIENTS)
           }
-          if (Array.isArray(r) && r.length) setReminders(r as any)
+          if (Array.isArray(r) && c.length) setReminders(r as any)
         } else {
-          console.log('💾 Using localStorage...')
           const storedClients = localStorage.getItem('viadukai.clients')
+          const storedReminders = localStorage.getItem('viadukai.reminders')
+          
           if (storedClients) {
             const parsed = JSON.parse(storedClients)
             if (Array.isArray(parsed)) setClients(parsed)
+            else setClients(DEFAULT_CLIENTS)
+          } else {
+            setClients(DEFAULT_CLIENTS)
           }
-          const storedReminders = localStorage.getItem('viadukai.reminders')
+          
           if (storedReminders) {
             const parsed = JSON.parse(storedReminders)
             if (Array.isArray(parsed)) setReminders(parsed)
           }
         }
       } catch (error) {
-        console.error('❌ Error loading data:', error)
+        console.error('Error loading data:', error)
+        setClients(DEFAULT_CLIENTS)
       }
       setHydrated(true)
-    })()
-  }, [])
+    }
 
-  // Remove automatic saving - only save when explicitly called
+    loadData()
+  }, [isSupabaseEnabled])
+
+  // Save reminders to storage
   useEffect(() => {
     if (!hydrated) return
     if (isSupabaseEnabled) {
@@ -205,8 +200,37 @@ export default function ResourceTable() {
     } else {
       try { localStorage.setItem('viadukai.reminders', JSON.stringify(reminders)) } catch {}
     }
-  }, [reminders, hydrated])
+  }, [reminders, hydrated, isSupabaseEnabled])
 
+  // Timer for warnings
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 60000)
+    return () => clearInterval(t)
+  }, [])
+
+  // Helper functions
+  const getTodayString = () => new Date().toISOString().split('T')[0]
+
+  const isWarningClient = (client: ClientData) => {
+    if (client.status !== 'Rezervuota' || !client.startDate) return false
+    const today = new Date()
+    const start = new Date(client.startDate)
+    today.setHours(0,0,0,0)
+    start.setHours(0,0,0,0)
+    const diffDays = Math.floor((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    return diffDays >= 0 && diffDays <= 14
+  }
+
+  const isCurrentWeek = (week: WeekData) => {
+    const today = new Date()
+    const start = new Date(week.startDate)
+    const end = new Date(week.endDate)
+    start.setHours(0,0,0,0)
+    end.setHours(23,59,59,999)
+    return today >= start && today <= end
+  }
+
+  // Client management functions
   const saveClientDetails = (update: {
     id: string
     name?: string
@@ -219,44 +243,39 @@ export default function ResourceTable() {
     files?: { name: string; size: number }[]
   }) => {
     console.log('🔧 saveClientDetails called with:', update)
-    const normalizeIntensity = (val?: string) => {
-      if (!val) return undefined
-      const v = val.toLowerCase()
-      if (v.includes('kas 1')) return 'kas 1 (100%)'
-      if (v.includes('kas 2')) return 'kas 2 (50%)'
-      if (v.includes('kas 4')) return 'kas 4 (25%)'
-      return val
-    }
+    
     setClients(prev => {
-      const next = prev.map(c => c.id === update.id ? {
-        ...c,
-        name: update.name ?? c.name,
-        status: update.status ?? c.status,
-        orderNumber: update.orderNumber ?? c.orderNumber,
-        intensity: normalizeIntensity(update.intensity) ?? c.intensity,
-        startDate: update.startDate ?? c.startDate,
-        endDate: update.endDate ?? c.endDate,
-        comment: update.comment ?? c.comment,
-        files: update.files ?? c.files,
-        // Atnaujinti warning statusą po datų pakeitimo
-        hasWarning: (() => {
-          if ((update.status ?? c.status) !== 'Rezervuota' || !(update.startDate ?? c.startDate)) return false
-          const today = new Date()
-          const start = new Date(update.startDate ?? c.startDate)
-          today.setHours(0,0,0,0)
-          start.setHours(0,0,0,0)
-          const diffDays = Math.floor((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-          return diffDays >= 0 && diffDays <= 14
-        })()
-      } : c)
-      
-      // Save to Supabase if enabled
-      if (isSupabaseEnabled) {
-        const updatedClient = next.find(c => c.id === update.id)
-        if (updatedClient) {
-          sbUpsertClient(updatedClient as any).catch(() => {})
+      const next = prev.map(c => {
+        if (c.id === update.id) {
+          const updatedClient = {
+            ...c,
+            name: update.name ?? c.name,
+            status: update.status ?? c.status,
+            orderNumber: update.orderNumber ?? c.orderNumber,
+            intensity: update.intensity ?? c.intensity,
+            startDate: update.startDate ?? c.startDate,
+            endDate: update.endDate ?? c.endDate,
+            comment: update.comment ?? c.comment,
+            files: update.files ?? c.files,
+            hasWarning: isWarningClient({
+              ...c,
+              status: update.status ?? c.status,
+              startDate: update.startDate ?? c.startDate
+            })
+          }
+          
+          // Save to storage
+          if (isSupabaseEnabled) {
+            sbUpsertClient(updatedClient as any).catch(() => {})
+          }
+          
+          return updatedClient
         }
-      } else {
+        return c
+      })
+      
+      // Save to localStorage if not using Supabase
+      if (!isSupabaseEnabled) {
         try { localStorage.setItem('viadukai.clients', JSON.stringify(next)) } catch {}
       }
       
@@ -266,16 +285,12 @@ export default function ResourceTable() {
   }
 
   const deleteClient = async (clientId: string) => {
-    console.log('🗑️ Deleting client:', clientId)
-    
     if (isSupabaseEnabled) {
       try {
-        console.log('📡 Deleting from Supabase...')
         await sbDeleteClient(clientId)
         await sbDeleteReminders(clientId)
-        console.log('✅ Successfully deleted from Supabase')
       } catch (error) {
-        console.error('❌ Failed to delete from Supabase:', error)
+        console.error('Failed to delete from Supabase:', error)
       }
     }
     
@@ -286,6 +301,7 @@ export default function ResourceTable() {
       }
       return next
     })
+    
     setReminders(prev => {
       const next = prev.filter(r => r.clientId !== clientId)
       if (!isSupabaseEnabled) { 
@@ -293,109 +309,28 @@ export default function ResourceTable() {
       }
       return next
     })
+    
     setIsModalOpen(false)
   }
 
-  // ticker for due calculation
-  const [nowTick, setNowTick] = useState<number>(Date.now())
-  useEffect(() => {
-    const t = setInterval(() => setNowTick(Date.now()), 60000)
-    return () => clearInterval(t)
-  }, [])
-
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], [nowTick])
-  const dueReminders = useMemo(() => reminders.filter(r => r.remindAt && r.remindAt <= todayStr), [reminders, todayStr])
-
-  // Auto generuojamos savaitės
-  const weeks = useMemo(() => {
-    const currentWeekStart = getCurrentWeekStart()
-    return generateWeeks(currentWeekStart, 20) // 20 savaičių
-  }, [])
-
-  // Automatiškai skaičiuoti savaičių reikšmes pagal datas ir intensyvumą
-  const clientsWithCalculatedWeeks = useMemo(() => {
-    return clients.map(client => ({
-      ...client,
-      weeks: generateWeekValues(client.startDate, client.endDate, client.intensity, weeks)
-    }))
-  }, [clients, weeks, clients.map(c => `${c.startDate}-${c.endDate}-${c.intensity}`).join('|')])
-
-  const filteredAndSortedClients = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    let arr = clientsWithCalculatedWeeks.filter(c => {
-      const matchesQ = !q || c.name.toLowerCase().includes(q) || c.orderNumber.toLowerCase().includes(q)
-      const matchesStatus = statusFilter === 'All' || c.status === statusFilter
-      const matchesFrom = !dateFromFilter || (c.startDate && c.startDate >= dateFromFilter)
-      const matchesTo = !dateToFilter || (c.endDate && c.endDate <= dateToFilter)
-      return matchesQ && matchesStatus && matchesFrom && matchesTo
-    })
-    const compare = (a: any, b: any) => {
-      const dir = sortDir === 'asc' ? 1 : -1
-      let av: any = a[sortBy]
-      let bv: any = b[sortBy]
-      if (sortBy === 'name' || sortBy === 'orderNumber' || sortBy === 'status') {
-        av = (av || '').toString().toLowerCase()
-        bv = (bv || '').toString().toLowerCase()
+  const saveReminder = (clientId: string, remindAt: string, message: string) => {
+    setReminders(prev => {
+      if (!remindAt) {
+        return prev.filter(r => r.clientId !== clientId)
       }
-      if (av === bv) return 0
-      return av > bv ? dir : -dir
-    }
-    arr.sort(compare)
-    return arr
-  }, [clientsWithCalculatedWeeks, searchQuery, statusFilter, dateFromFilter, dateToFilter, sortBy, sortDir])
-
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(filteredAndSortedClients.length / pageSize)), [filteredAndSortedClients.length, pageSize])
-  useEffect(() => { if (page > totalPages) setPage(totalPages) }, [totalPages, page])
-  const paginatedClients = useMemo(() => {
-    const start = (page - 1) * pageSize
-    return filteredAndSortedClients.slice(start, start + pageSize)
-  }, [filteredAndSortedClients, page, pageSize])
-
-  const getClientWithWeeksById = (clientId: string): ClientData | null => {
-    const found = clientsWithCalculatedWeeks.find(c => c.id === clientId)
-    return found || null
-  }
-
-  // Skaičiuoti sumas kiekvienai savaitei (išskyrus "Atšaukta" statuso klientus)
-  const weekSums = useMemo(() => {
-    const sums: { [weekId: string]: number } = {}
-    weeks.forEach(week => {
-      sums[week.id] = clientsWithCalculatedWeeks
-        .filter(client => client.status !== 'Atšaukta') // Neįtraukti atšauktų klientų
-        .reduce((sum, client) => sum + (client.weeks[week.id] || 0), 0)
-    })
-    return sums
-  }, [clientsWithCalculatedWeeks, weeks])
-
-  const openModal = (client: ClientData) => {
-    // debug
-    try { console.log('openModal called with', client?.name) } catch {}
-    setSelectedTask(client)
-    setIsModalOpen(true)
-  }
-
-  const openFromReminder = (clientId: string) => {
-    const client = getClientWithWeeksById(clientId)
-    if (client) {
-      openModal(client)
-    }
-  }
-
-  const dismissReminder = (id: string) => {
-    setReminders(prev => prev.filter(r => r.id !== id))
-  }
-
-  // Temp: press 'm' to open first visible client (diagnostics)
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === 'm') {
-        if (filteredAndSortedClients[0]) openModal(filteredAndSortedClients[0])
+      
+      const existing = prev.find(r => r.clientId === clientId)
+      if (existing) {
+        return prev.map(r => r.clientId === clientId ? { ...r, remindAt, message } : r)
       }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [filteredAndSortedClients])
+      
+      return [...prev, { id: `r-${clientId}-${Date.now()}`, clientId, remindAt, message }]
+    })
+  }
 
+  const getReminder = (clientId: string) => reminders.find(r => r.clientId === clientId)
+
+  // Form handling
   const handleFormChange = (field: keyof NewClientForm, value: string) => {
     setNewClientForm(prev => ({ ...prev, [field]: value }))
   }
@@ -406,13 +341,11 @@ export default function ResourceTable() {
       return
     }
 
-    // Patikrinti, ar pabaigos data yra po pradžios datos
     if (new Date(newClientForm.endDate) <= new Date(newClientForm.startDate)) {
       alert('Pabaigos data turi būti po pradžios datos')
       return
     }
 
-    // Patikrinti, ar jau egzistuoja klientas su tuo pačiu pavadinimu ir užsakymo numeriu
     const existingClient = clients.find(client => 
       client.name.toLowerCase() === newClientForm.name.toLowerCase() && 
       client.orderNumber.toLowerCase() === newClientForm.orderNumber.toLowerCase()
@@ -439,7 +372,6 @@ export default function ResourceTable() {
     setClients(prev => {
       const next = [...prev, newClient]
       
-      // Save to Supabase if enabled
       if (isSupabaseEnabled) {
         sbUpsertClient(newClient as any).catch(() => {})
       } else {
@@ -449,7 +381,6 @@ export default function ResourceTable() {
       return next
     })
     
-    // Išvalyti formą
     setNewClientForm({
       name: '',
       status: 'Patvirtinta',
@@ -458,36 +389,101 @@ export default function ResourceTable() {
       endDate: '',
       intensity: 'kas 4 (25%)'
     })
-
-    // Pašaliname patvirtinimo alert'ą - vartotojas jau apsisprendė
   }
 
-  // Gauti šiandienos datą formatu YYYY-MM-DD
-  const getTodayString = () => {
-    const today = new Date()
-    return today.toISOString().split('T')[0]
+  // Modal handling
+  const openModal = (client: ClientData) => {
+    setSelectedTask(client)
+    setIsModalOpen(true)
   }
 
-  // Warning: status Rezervuota AND start date within next 14 days
-  const isWarningClient = (client: ClientData) => {
-    if (client.status !== 'Rezervuota' || !client.startDate) return false
-    const today = new Date()
-    const start = new Date(client.startDate)
-    // normalize to start-of-day
-    today.setHours(0,0,0,0)
-    start.setHours(0,0,0,0)
-    const diffDays = Math.floor((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-    return diffDays >= 0 && diffDays <= 14
+  const openFromReminder = (clientId: string) => {
+    const client = clients.find(c => c.id === clientId)
+    if (client) {
+      openModal(client)
+    }
   }
 
-  // Identify current week's column
-  const isCurrentWeek = (week: WeekData) => {
-    const today = new Date()
-    const start = new Date(week.startDate)
-    const end = new Date(week.endDate)
-    start.setHours(0,0,0,0)
-    end.setHours(23,59,59,999)
-    return today >= start && today <= end
+  const dismissReminder = (id: string) => {
+    setReminders(prev => prev.filter(r => r.id !== id))
+  }
+
+  // Computed values
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], [nowTick])
+  const dueReminders = useMemo(() => reminders.filter(r => r.remindAt && r.remindAt <= todayStr), [reminders, todayStr])
+
+  const clientsWithCalculatedWeeks = useMemo(() => {
+    return clients.map(client => ({
+      ...client,
+      weeks: generateWeekValues(client.startDate, client.endDate, client.intensity, weeks)
+    }))
+  }, [clients, weeks])
+
+  const filteredAndSortedClients = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    let arr = clientsWithCalculatedWeeks.filter(c => {
+      const matchesQ = !q || c.name.toLowerCase().includes(q) || c.orderNumber.toLowerCase().includes(q)
+      const matchesStatus = statusFilter === 'All' || c.status === statusFilter
+      const matchesFrom = !dateFromFilter || (c.startDate && c.startDate >= dateFromFilter)
+      const matchesTo = !dateToFilter || (c.endDate && c.endDate <= dateToFilter)
+      return matchesQ && matchesStatus && matchesFrom && matchesTo
+    })
+    
+    const compare = (a: any, b: any) => {
+      const dir = sortDir === 'asc' ? 1 : -1
+      let av: any = a[sortBy]
+      let bv: any = b[sortBy]
+      if (sortBy === 'name' || sortBy === 'orderNumber' || sortBy === 'status') {
+        av = (av || '').toString().toLowerCase()
+        bv = (bv || '').toString().toLowerCase()
+      }
+      if (av === bv) return 0
+      return av > bv ? dir : -dir
+    }
+    
+    arr.sort(compare)
+    return arr
+  }, [clientsWithCalculatedWeeks, searchQuery, statusFilter, dateFromFilter, dateToFilter, sortBy, sortDir])
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(filteredAndSortedClients.length / pageSize)), [filteredAndSortedClients.length, pageSize])
+  const paginatedClients = useMemo(() => {
+    const start = (page - 1) * pageSize
+    return filteredAndSortedClients.slice(start, start + pageSize)
+  }, [filteredAndSortedClients, page, pageSize])
+
+  const weekSums = useMemo(() => {
+    const sums: { [weekId: string]: number } = {}
+    weeks.forEach(week => {
+      sums[week.id] = clientsWithCalculatedWeeks
+        .filter(client => client.status !== 'Atšaukta')
+        .reduce((sum, client) => sum + (client.weeks[week.id] || 0), 0)
+    })
+    return sums
+  }, [clientsWithCalculatedWeeks, weeks])
+
+  // Reset page when filters change
+  useEffect(() => { if (page > totalPages) setPage(totalPages) }, [totalPages, page])
+
+  // Keyboard shortcuts for debugging
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === 'm') {
+        if (filteredAndSortedClients[0]) openModal(filteredAndSortedClients[0])
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [filteredAndSortedClients])
+
+  if (!hydrated) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Kraunama...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -611,7 +607,6 @@ export default function ResourceTable() {
               + Pridėti
             </button>
             
-            {/* Waiting List mygtukas */}
             <button 
               onClick={() => setIsWaitingListOpen(true)}
               className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 font-medium whitespace-nowrap transition-colors"
@@ -631,7 +626,6 @@ export default function ResourceTable() {
               <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 min-w-[220px] border-r border-gray-200 sticky left-0 z-40 bg-gray-50">Pavadinimas</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 min-w-[100px] border-r border-gray-200 sticky left-[220px] z-40 bg-gray-50 shadow-r">Status</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 min-w-[120px] border-r border-gray-200">Užsakymo Nr.</th>
-              {/* Dinamiškai generuojami savaitės stulpeliai */}
               {weeks.map((week, index) => (
                 <th 
                   key={week.id} 
@@ -694,16 +688,17 @@ export default function ResourceTable() {
             ))}
           </tbody>
         </table>
-        {/* Suma Row - sticky po header'io */}
+        
+        {/* Suma Row */}
         <div className="bg-gray-100 border-t border-gray-200 sticky top-[72px] z-20" style={{ position: 'sticky', top: '72px' }}>
           <div className="flex items-center px-4 py-3 relative">
             <span className="text-sm font-semibold text-gray-900 min-w-[220px] border-r border-gray-200 pr-4 sticky left-0 z-30 bg-gray-100" style={{ position: 'sticky', left: '0' }}>Transliacijų viso:</span>
             <span className="text-sm font-semibold text-gray-900 min-w-[100px] border-r border-gray-200 pr-4 sticky left-[220px] z-30 bg-gray-100 shadow-r" style={{ position: 'sticky', left: '220px' }}></span>
             <span className="text-sm font-semibold text-gray-900 min-w-[120px] border-r border-gray-200 pr-4"></span>
-                          {weeks.map((week, index) => (
-                <span key={week.id} className={`text-sm font-semibold text-gray-900 min-w-[100px] text-center border-r border-gray-200 pr-4 ${
-                  index === weeks.length - 1 ? '' : 'border-r'
-                }`}>
+            {weeks.map((week, index) => (
+              <span key={week.id} className={`text-sm font-semibold text-gray-900 min-w-[100px] text-center border-r border-gray-200 pr-4 ${
+                index === weeks.length - 1 ? '' : 'border-r'
+              }`}>
                 <span className={`${
                   weekSums[week.id] >= 240 
                     ? 'text-white bg-red-500 px-2 py-1 rounded font-bold' 
@@ -716,14 +711,16 @@ export default function ResourceTable() {
           </div>
         </div>
       </div>
+
+      {/* Pagination */}
       <div className="flex items-center justify-between p-3 text-sm text-gray-700">
         <div>
           Rodyti po
           <select value={pageSize} onChange={(e)=>{ setPageSize(parseInt(e.target.value)); setPage(1) }} className="ml-2 mr-2 px-2 py-1 border border-gray-300 rounded">
             <option value={5}>5</option>
             <option value={10}>10</option>
-            <option value={20}>20</option>
-            <option value={100}>100</option>
+            <option value="20">20</option>
+            <option value="100">100</option>
           </select>
           įrašų. Iš viso: {filteredAndSortedClients.length}
         </div>
@@ -733,6 +730,8 @@ export default function ResourceTable() {
           <button className="px-3 py-1 border rounded disabled:opacity-50" onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page>=totalPages}>Kitas</button>
         </div>
       </div>
+
+      {/* Modals */}
       <TaskDetailModal
         open={isModalOpen}
         onOpenChange={(v) => setIsModalOpen(v)}
@@ -746,7 +745,6 @@ export default function ResourceTable() {
         onDelete={(clientId: string) => deleteClient(clientId)}
       />
       
-      {/* Waiting List Modal */}
       <WaitingListModal
         open={isWaitingListOpen}
         onOpenChange={(v) => setIsWaitingListOpen(v)}
