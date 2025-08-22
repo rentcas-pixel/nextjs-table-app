@@ -92,6 +92,23 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
       setEndDate(task.endDate)
       setComment(task.comment || '')
       setFiles(task.files || [])
+      
+      // Atnaujinti previews iš localStorage
+      if (task.id) {
+        try {
+          const key = `viadukai.filePreviews.${task.id}`
+          const stored = localStorage.getItem(key)
+          if (stored) {
+            const parsed = JSON.parse(stored)
+            if (Array.isArray(parsed)) {
+              setPreviews(parsed)
+              console.log('🔧 TaskDetailModal: loaded previews from localStorage:', parsed)
+            }
+          }
+        } catch (error) {
+          console.error('🔧 TaskDetailModal: failed to load previews:', error)
+        }
+      }
     }
   }, [task])
 
