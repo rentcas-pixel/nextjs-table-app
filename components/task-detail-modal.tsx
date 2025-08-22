@@ -298,16 +298,42 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
 
       const newFiles: { name: string; size: number }[] = []
       const newPreviews: { name: string; src: string }[] = []
-      files.forEach((file, idx) => {
+      
+      // Konvertuoti failus į base64 ir išsaugoti
+      for (let idx = 0; idx < files.length; idx++) {
+        const file = files[idx]
         const ts = new Date().toISOString().replace(/[-:T.Z]/g, '')
         const ext = file.type === 'image/png' ? 'png' : (file.type === 'image/webp' ? 'webp' : 'jpg')
         const name = `screenshot-${ts}${files.length > 1 ? '-' + (idx+1) : ''}.${ext}`
+        
         newFiles.push({ name, size: file.size })
-        const src = URL.createObjectURL(file)
-        newPreviews.push({ name, src })
-        setFileUrls(prev => ({ ...prev, [name]: src }))
-        setPendingUploads(prev => [...prev, { name, file }])
-      })
+        
+        // Konvertuoti failą į base64
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          const base64 = e.target?.result as string
+          if (base64) {
+            newPreviews.push({ name, src: base64 })
+            setFileUrls(prev => ({ ...prev, [name]: base64 }))
+            setPendingUploads(prev => [...prev, { name, file }])
+            
+            // Iškart išsaugoti į localStorage
+            if (safeTask.id) {
+              try {
+                const key = `viadukai.filePreviews.${safeTask.id}`
+                const existing = localStorage.getItem(key)
+                const existingArray = existing ? JSON.parse(existing) : []
+                const updated = [...existingArray, { name, src: base64 }]
+                localStorage.setItem(key, JSON.stringify(updated))
+                console.log('🔧 handlePaste: saved to localStorage:', updated)
+              } catch (error) {
+                console.error('🔧 handlePaste: failed to save to localStorage:', error)
+              }
+            }
+          }
+        }
+        reader.readAsDataURL(file)
+      }
       
       console.log('🔧 handlePaste: newFiles:', newFiles)
       console.log('🔧 handlePaste: newPreviews:', newPreviews)
@@ -433,6 +459,8 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   <div className="col-span-3 text-xs text-gray-500 mb-2">
                     Debug: {previews.length} previews loaded
+                    <br />
+                    Preview data: {JSON.stringify(previews.map(p => ({ name: p.name, src: p.src.substring(0, 50) + '...' })))}
                   </div>
                   {previews.map(p => (
                     <div key={p.name} className="relative">
