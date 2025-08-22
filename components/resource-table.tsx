@@ -237,13 +237,6 @@ export default function ResourceTable() {
         endDate: update.endDate ?? c.endDate,
         comment: update.comment ?? c.comment,
         files: update.files ?? c.files,
-        // Automatiškai perskaičiuoti savaičių reikšmes po datų ar intensyvumo pakeitimo
-        weeks: generateWeekValues(
-          update.startDate ?? c.startDate, 
-          update.endDate ?? c.endDate, 
-          normalizeIntensity(update.intensity) ?? c.intensity, 
-          weeks
-        ),
         // Atnaujinti warning statusą po datų pakeitimo
         hasWarning: (() => {
           if ((update.status ?? c.status) !== 'Rezervuota' || !(update.startDate ?? c.startDate)) return false
@@ -323,7 +316,7 @@ export default function ResourceTable() {
       ...client,
       weeks: generateWeekValues(client.startDate, client.endDate, client.intensity, weeks)
     }))
-  }, [clients, weeks])
+  }, [clients, weeks, clients.map(c => `${c.startDate}-${c.endDate}-${c.intensity}`).join('|')])
 
   const filteredAndSortedClients = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
