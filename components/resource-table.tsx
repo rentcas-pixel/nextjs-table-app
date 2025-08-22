@@ -1,9 +1,10 @@
 'use client'
 
 import React, { useState, useMemo, useEffect } from 'react'
-import { isSupabaseEnabled, fetchClients as sbFetchClients, upsertClient as sbUpsertClient, deleteClientById as sbDeleteClient, fetchReminders as sbFetchReminders, upsertReminder as sbUpsertReminder, deleteRemindersByClient as sbDeleteReminders } from '../lib/supabase'
+import { isSupabaseEnabled, fetchClients as sbFetchClients, upsertClient as sbUpsertClient, deleteClientById as sbDeleteClient, fetchReminders as sbFetchReminders, upsertReminder as sbUpsertReminder, deleteRemindersByClient as sbDeleteReminders, updateReminderStatus } from '../lib/supabase'
 import TaskDetailModal from './task-detail-modal'
 import WaitingListModal from './waiting-list-modal'
+import RemindersPopup from './reminders-popup'
 import { generateWeeks, getCurrentWeekStart, WeekData, generateWeekValues } from '../lib/utils'
 
 interface ClientData {
@@ -34,6 +35,9 @@ interface Reminder {
   clientId: string
   message: string
   remindAt: string
+  status?: string
+  shownToday?: boolean
+  lastShown?: string
 }
 
 const DEFAULT_CLIENTS: ClientData[] = [
@@ -120,6 +124,7 @@ export default function ResourceTable() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedTask, setSelectedTask] = useState<ClientData | null>(null)
   const [isWaitingListOpen, setIsWaitingListOpen] = useState(false)
+  const [showRemindersPopup, setShowRemindersPopup] = useState(false)
   const [hydrated, setHydrated] = useState(false)
 
   // Form state
@@ -207,6 +212,22 @@ export default function ResourceTable() {
     const t = setInterval(() => setNowTick(Date.now()), 60000)
     return () => clearInterval(t)
   }, [])
+
+  // Check for today's reminders when page loads
+  useEffect(() => {
+    if (!hydrated || !reminders.length) return
+    
+    const today = getTodayString()
+    const todaysReminders = reminders.filter(r => 
+      r.remindAt === today && 
+      (!r.status || r.status === 'active') && 
+      (!r.shownToday || !r.shownToday)
+    )
+    
+    if (todaysReminders.length > 0) {
+      setShowRemindersPopup(true)
+    }
+  }, [hydrated, reminders])
 
   // Helper functions
   const getTodayString = () => new Date().toISOString().split('T')[0]
@@ -321,11 +342,46 @@ export default function ResourceTable() {
       
       const existing = prev.find(r => r.clientId === clientId)
       if (existing) {
-        return prev.map(r => r.clientId === clientId ? { ...r, remindAt, message } : r)
+        return prev.map(r => r.clientId === clientId ? { ...r, remindAt, message, status: 'active', shownToday: false } : r)
       }
       
-      return [...prev, { id: `r-${clientId}-${Date.now()}`, clientId, remindAt, message }]
+      return [...prev, { id: `r-${clientId}-${Date.now()}`, clientId, remindAt, message, status: 'active', shownToday: false }]
     })
+  }
+
+  const handleReminderCompleted = async (reminderId: string) => {
+    if (isSupabaseEnabled) {
+      await updateReminderStatus(reminderId, 'completed', true)
+    }
+    
+    setReminders(prev => prev.map(r => 
+      r.id === reminderId 
+        ? { ...r, status: 'completed', shownToday: true, lastShown: getTodayString() }
+        : r
+    ))
+  }
+
+  const handleRemindersPopupClose = () => {
+    // Mark all today's reminders as shown
+    const today = getTodayString()
+    const todaysReminders = reminders.filter(r => 
+      r.remindAt === today && 
+      (!r.status || r.status === 'active')
+    )
+    
+    todaysReminders.forEach(reminder => {
+      if (isSupabaseEnabled) {
+        updateReminderStatus(reminder.id, reminder.status || 'active', true)
+      }
+      
+      setReminders(prev => prev.map(r => 
+        r.id === reminder.id 
+          ? { ...r, shownToday: true, lastShown: today }
+          : r
+      ))
+    })
+    
+    setShowRemindersPopup(false)
   }
 
   const getReminder = (clientId: string) => reminders.find(r => r.clientId === clientId)
@@ -776,6 +832,16 @@ export default function ResourceTable() {
         open={isWaitingListOpen}
         onOpenChange={(v) => setIsWaitingListOpen(v)}
       />
+
+      {/* Reminders Popup */}
+      {showRemindersPopup && (
+        <RemindersPopup
+          reminders={reminders}
+          clients={clients}
+          onClose={handleRemindersPopupClose}
+          onMarkCompleted={handleReminderCompleted}
+        />
+      )}
     </div>
   )
 }

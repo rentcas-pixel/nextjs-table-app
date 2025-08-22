@@ -51,6 +51,9 @@ export type ReminderRecord = {
   clientId: string
   remindAt: string
   message: string
+  status?: string
+  shownToday?: boolean
+  lastShown?: string
 }
 
 export interface WaitingListClient {
@@ -93,6 +96,9 @@ function toDbReminder(r: ReminderRecord): any {
     clientid: r.clientId,
     remindat: r.remindAt,
     message: r.message,
+    status: r.status || 'active',
+    shown_today: r.shownToday || false,
+    last_shown: r.lastShown || null,
   }
 }
 function fromDbReminder(row: any): ReminderRecord {
@@ -101,6 +107,9 @@ function fromDbReminder(row: any): ReminderRecord {
     clientId: row.clientid ?? row.clientId,
     remindAt: row.remindat ?? row.remindAt,
     message: row.message,
+    status: row.status || 'active',
+    shownToday: row.shown_today || false,
+    lastShown: row.last_shown || null,
   }
 }
 
@@ -159,6 +168,22 @@ export async function deleteRemindersByClient(clientId: string): Promise<void> {
   let { error } = await supabase.from('reminders').delete().eq('clientid', clientId)
   if (error) {
     const { error: errAlt } = await supabase.from('Reminders' as any).delete().eq('clientid', clientId)
+    if (errAlt) throw errAlt
+  }
+}
+
+export async function updateReminderStatus(reminderId: string, status: string, shownToday: boolean = false): Promise<void> {
+  if (!isSupabaseEnabled) return
+  
+  const updateData: any = { status }
+  if (shownToday) {
+    updateData.shown_today = true
+    updateData.last_shown = new Date().toISOString().split('T')[0]
+  }
+  
+  let { error } = await supabase.from('reminders').update(updateData).eq('id', reminderId)
+  if (error) {
+    const { error: errAlt } = await supabase.from('Reminders' as any).update(updateData).eq('id', reminderId)
     if (errAlt) throw errAlt
   }
 }
