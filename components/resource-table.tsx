@@ -536,7 +536,7 @@ export default function ResourceTable() {
 
       {/* Add Client Section */}
       <div className="p-6 border-b border-gray-200">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">Pridėti klientą</h2>
+        <h2 className="text-lg font-medium text-gray-900 mb-4">Pridėti</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4 items-end">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Pavadinimas *</label>
