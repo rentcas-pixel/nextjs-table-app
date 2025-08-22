@@ -733,6 +733,7 @@ export default function ResourceTable() {
 
       {/* Modals */}
       <TaskDetailModal
+        key={selectedTask?.id || 'no-task'}
         open={isModalOpen}
         onOpenChange={(v) => setIsModalOpen(v)}
         task={selectedTask}
