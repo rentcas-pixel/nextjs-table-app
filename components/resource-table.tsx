@@ -218,6 +218,7 @@ export default function ResourceTable() {
     comment?: string
     files?: { name: string; size: number }[]
   }) => {
+    console.log('🔧 saveClientDetails called with:', update)
     const normalizeIntensity = (val?: string) => {
       if (!val) return undefined
       const v = val.toLowerCase()
@@ -259,6 +260,7 @@ export default function ResourceTable() {
         try { localStorage.setItem('viadukai.clients', JSON.stringify(next)) } catch {}
       }
       
+      console.log('🔧 Updated clients state:', next)
       return next
     })
   }
