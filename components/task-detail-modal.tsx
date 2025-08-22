@@ -75,6 +75,20 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
     setReminderMsg(currentReminder?.message || '')
   }, [currentReminder])
 
+  // Atnaujinti modalą kai task keičiasi (po išsaugojimo)
+  useEffect(() => {
+    if (task) {
+      setName(task.name)
+      setStatus(task.status)
+      setOrderNumber(task.orderNumber)
+      setIntensity(task.intensity)
+      setStartDate(task.startDate)
+      setEndDate(task.endDate)
+      setComment(task.comment || '')
+      setFiles(task.files || [])
+    }
+  }, [task])
+
   useEffect(() => {
     if (!safeTask.id) return
     try {

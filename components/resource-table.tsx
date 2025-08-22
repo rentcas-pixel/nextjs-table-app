@@ -741,7 +741,21 @@ export default function ResourceTable() {
           saveReminder(selectedTask.id, remindAt, message)
         }}
         currentReminder={selectedTask ? getReminder(selectedTask.id) : undefined}
-        onSaveDetails={(payload) => saveClientDetails(payload)}
+        onSaveDetails={(payload) => {
+          saveClientDetails(payload)
+          // Atnaujinti selectedTask su naujais duomenimis
+          if (selectedTask) {
+            const updatedTask = {
+              ...selectedTask,
+              ...payload,
+              hasWarning: isWarningClient({
+                ...selectedTask,
+                ...payload
+              })
+            }
+            setSelectedTask(updatedTask)
+          }
+        }}
         onDelete={(clientId: string) => deleteClient(clientId)}
       />
       
