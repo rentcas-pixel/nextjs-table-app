@@ -241,7 +241,7 @@ export default function ResourceTable() {
     endDate?: string
     comment?: string
     files?: { name: string; size: number }[]
-  }, onComplete?: (updatedClient: ClientData) => void) => {
+  }) => {
     console.log('🔧 saveClientDetails called with:', update)
     
     setClients(prev => {
@@ -267,11 +267,6 @@ export default function ResourceTable() {
           // Save to storage
           if (isSupabaseEnabled) {
             sbUpsertClient(updatedClient as any).catch(() => {})
-          }
-          
-          // Iškart iškviesti callback'ą su atnaujintu client'u
-          if (onComplete) {
-            onComplete(updatedClient)
           }
           
           return updatedClient
@@ -754,12 +749,25 @@ export default function ResourceTable() {
         currentReminder={selectedTask ? getReminder(selectedTask.id) : undefined}
         onSaveDetails={(payload) => {
           console.log('🔧 onSaveDetails called with payload:', payload)
-          saveClientDetails(payload, (updatedClient) => {
-            console.log('🔧 Callback received updatedClient:', updatedClient)
-            console.log('🔧 Previous selectedTask:', selectedTask)
+          if (selectedTask) {
+            // Iškart sukurti atnaujintą client'ą
+            const updatedClient = {
+              ...selectedTask,
+              ...payload,
+              hasWarning: isWarningClient({
+                ...selectedTask,
+                ...payload
+              })
+            }
+            console.log('🔧 Created updatedClient:', updatedClient)
+            
+            // Iškart atnaujinti selectedTask
             setSelectedTask(updatedClient)
             console.log('🔧 Setting selectedTask to:', updatedClient)
-          })
+            
+            // Tada išsaugoti į clients state'ą
+            saveClientDetails(payload)
+          }
         }}
         onDelete={(clientId: string) => deleteClient(clientId)}
       />
