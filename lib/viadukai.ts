@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { type WeekData } from './utils'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -93,6 +94,5 @@ export function getWeekRange(startDate: Date, endDate: Date): WeekData[] {
   return weeks
 }
 
-// WeekData tipas importuojamas iš lib/utils.ts
-export type { WeekData } from './utils'
+
  
