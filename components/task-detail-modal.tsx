@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react'
 import { X } from 'lucide-react'
-import { generateWeeks, getCurrentWeekStart, getClientWeeks } from '../lib/utils'
+import { generateExtendedWeeks, getCurrentWeekStart, getClientWeeks } from '../lib/utils'
 import { isSupabaseEnabled, uploadFilesToBucket, supabase } from '../lib/supabase'
 import AlertDialog from './ui/alert-dialog'
 
@@ -22,8 +22,7 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
   const safeTask = task ?? { id: '', name: '', status: 'Patvirtinta', orderNumber: '', intensity: 'kas 1 (100%)', startDate: '', endDate: '', comment: '', files: [] }
 
   const allWeeks = useMemo(() => {
-    const start = getCurrentWeekStart()
-    return generateWeeks(start, 20)
+    return generateExtendedWeeks()
   }, [])
 
   const clientWeeks = useMemo(() => getClientWeeks(safeTask.startDate, safeTask.endDate, allWeeks), [safeTask.startDate, safeTask.endDate, allWeeks])

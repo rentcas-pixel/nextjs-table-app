@@ -1,4 +1,4 @@
-import ResourceTable from '@/components/resource-table'
+import ResourceTable from '../components/resource-table'
 
 export default function Home() {
   return (

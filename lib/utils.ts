@@ -55,6 +55,46 @@ export function generateWeeks(startDate: Date, numberOfWeeks: number = 20): Week
   return weeks
 }
 
+// Funkcija, kuri patikrina, ar savaitė yra metų riboje
+export function isYearBoundary(week: WeekData, previousWeek?: WeekData): boolean {
+  if (!previousWeek) return false
+  return week.year !== previousWeek.year
+}
+
+// Funkcija, kuri generuoja savaites nuo šios savaitės iki 2026 metų pabaigos
+export function generateExtendedWeeks(): WeekData[] {
+  const weeks: WeekData[] = []
+  
+  // Pradžia: šios savaitės pirmadienis
+  const startDate = getCurrentWeekStart()
+  
+  // Generuojame savaites iki 2026 metų pabaigos (apie 100+ savaičių)
+  for (let i = 0; i < 120; i++) { // Padidiname limitą, kad užtektų iki 2026
+    const weekStart = new Date(startDate)
+    weekStart.setDate(startDate.getDate() + (i * 7))
+    
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekStart.getDate() + 6)
+    
+    const weekNumber = getWeekNumber(weekStart)
+    const year = weekStart.getFullYear()
+    
+    weeks.push({
+      id: `w-${weekNumber}-${year}`,
+      weekNumber,
+      year,
+      startDate: weekStart,
+      endDate: weekEnd,
+      label: `${year}-${formatDate(weekStart).split('/')[1]}-${formatDate(weekStart).split('/')[0]} W-${weekNumber} ${year}`,
+      shortLabel: `W-${weekNumber}`,
+      fullLabel: `${year}-${formatDate(weekStart).split('/')[1]}-${formatDate(weekStart).split('/')[0]} W-${weekNumber} ${year}`,
+      isYearBoundary: i > 0 ? isYearBoundary({ year } as WeekData, weeks[i - 1]) : false
+    })
+  }
+  
+  return weeks
+}
+
 export function getCurrentWeekStart(): Date {
   const now = new Date()
   const dayOfWeek = now.getDay()
@@ -175,4 +215,5 @@ export interface WeekData {
   label: string
   shortLabel: string
   fullLabel: string
+  isYearBoundary?: boolean
 }

@@ -5,7 +5,7 @@ import { isSupabaseEnabled, fetchClients as sbFetchClients, upsertClient as sbUp
 import TaskDetailModal from './task-detail-modal'
 import WaitingListModal from './waiting-list-modal'
 import RemindersPopup from './reminders-popup'
-import { generateWeeks, getCurrentWeekStart, WeekData, generateWeekValues } from '../lib/utils'
+import { generateExtendedWeeks, getCurrentWeekStart, WeekData, generateWeekValues, isYearBoundary } from '../lib/utils'
 
 interface ClientData {
   id: string
@@ -154,8 +154,7 @@ export default function ResourceTable() {
 
   // Generate weeks
   const weeks = useMemo(() => {
-    const currentWeekStart = getCurrentWeekStart()
-    return generateWeeks(currentWeekStart, 20)
+    return generateExtendedWeeks()
   }, [])
 
   // Load data on mount
@@ -695,9 +694,12 @@ export default function ResourceTable() {
                   key={week.id} 
                   className={`px-3 py-3 text-center text-sm font-medium text-gray-900 min-w-[100px] border-r border-gray-200 sticky top-0 z-30 bg-gray-50 ${
                     index === weeks.length - 1 ? '' : 'border-r'
-                  }`}
+                  } ${week.isYearBoundary ? 'border-l-2 border-l-green-500' : ''}`}
                 >
-                  <div className={`font-semibold ${isCurrentWeek(week) ? 'text-green-600' : 'text-gray-800'}`}>{week.shortLabel}</div>
+                  <div className={`font-semibold ${isCurrentWeek(week) ? 'text-green-600' : 'text-gray-800'}`}>
+                    {week.shortLabel}
+                    {week.isYearBoundary && <span className="text-green-600 text-xs ml-1">→{week.year}</span>}
+                  </div>
                   <div className="text-xs text-gray-500 font-normal mt-1">
                     {week.startDate.toLocaleDateString('lt-LT', { day: '2-digit', month: '2-digit' })} - {week.endDate.toLocaleDateString('lt-LT', { day: '2-digit', month: '2-digit' })}
                   </div>
@@ -733,7 +735,7 @@ export default function ResourceTable() {
                 {weeks.map((week, index) => (
                   <td key={week.id} className={`px-3 py-3 text-center text-sm text-gray-900 border-r border-gray-200 ${
                     index === weeks.length - 1 ? '' : 'border-r'
-                  }`} onClick={() => openModal(client)}>
+                  } ${week.isYearBoundary ? 'border-l-2 border-l-green-500' : ''}`} onClick={() => openModal(client)}>
                     <span className={`font-medium ${
                       client.weeks[week.id] && client.weeks[week.id] > 0 
                         ? client.weeks[week.id] > 240 
@@ -762,7 +764,7 @@ export default function ResourceTable() {
             {weeks.map((week, index) => (
               <span key={week.id} className={`text-sm font-semibold text-gray-900 min-w-[100px] text-center border-r border-gray-200 pr-4 ${
                 index === weeks.length - 1 ? '' : 'border-r'
-              }`}>
+              } ${week.isYearBoundary ? 'border-l-2 border-l-green-500' : ''}`}>
                 <span className={`${
                   weekSums[week.id] >= 240 
                     ? 'text-white bg-red-500 px-2 py-1 rounded font-bold' 
