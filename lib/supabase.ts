@@ -156,10 +156,22 @@ export async function fetchReminders(): Promise<ReminderRecord[]> {
 
 export async function upsertReminder(rec: ReminderRecord): Promise<void> {
   if (!isSupabaseEnabled) return
-  let { error } = await supabase.from('reminders').upsert(toDbReminder(rec), { onConflict: 'id' })
+  
+  // Patikrinti, ar visi reikalingi laukai yra
+  const dbRec = toDbReminder(rec)
+  if (!dbRec.id || !dbRec.clientid || !dbRec.remindat || !dbRec.message) {
+    console.error('❌ Priminimas: trūksta reikalingų laukų:', dbRec)
+    return
+  }
+  
+  let { error } = await supabase.from('reminders').upsert(dbRec, { onConflict: 'id' })
   if (error) {
-    const { error: errAlt } = await supabase.from('Reminders' as any).upsert(toDbReminder(rec), { onConflict: 'id' })
-    if (errAlt) throw errAlt
+    console.error('❌ Priminimas: klaida saugant į reminders:', error)
+    const { error: errAlt } = await supabase.from('Reminders' as any).upsert(dbRec, { onConflict: 'id' })
+    if (errAlt) {
+      console.error('❌ Priminimas: klaida saugant į Reminders:', errAlt)
+      throw errAlt
+    }
   }
 }
 

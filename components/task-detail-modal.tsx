@@ -43,6 +43,9 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
   const [fileUrls, setFileUrls] = useState<{ [name: string]: string }>({})
   const [pendingUploads, setPendingUploads] = useState<{ name: string; file: File }[]>([])
   const openedAtRef = React.useRef<number>(0)
+  
+  // Apibrėžti open prieš naudojant useEffect'uose
+  const open = controlledOpen ?? !!isOpen
 
   useEffect(() => {
     if (open) openedAtRef.current = Date.now()
@@ -75,58 +78,67 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
   }, [currentReminder])
 
   // Atnaujinti modalą kai task keičiasi (po išsaugojimo)
+  const prevTaskIdRef = React.useRef<string | null>(null)
+  
   useEffect(() => {
+    if (!task || !open) return
+    
+    // Tik atnaujinti, jei task.id pasikeitė arba modalas tik atsidarė
+    const taskIdChanged = prevTaskIdRef.current !== task.id
+    if (!taskIdChanged && prevTaskIdRef.current !== null) return
+    
+    prevTaskIdRef.current = task.id
+    
     console.log('🔧 TaskDetailModal: task prop changed to:', task)
-    if (task) {
-      console.log('🔧 TaskDetailModal: updating internal state with:', {
-        name: task.name,
-        startDate: task.startDate,
-        endDate: task.endDate
-      })
-      setName(task.name)
-      setStatus(task.status)
-      setOrderNumber(task.orderNumber)
-      setIntensity(task.intensity)
-      setStartDate(task.startDate)
-      setEndDate(task.endDate)
-      setComment(task.comment || '')
-      setFiles(task.files || [])
-      
-      // Atnaujinti previews iš localStorage
-      if (task.id) {
-        try {
-          const key = `viadukai.filePreviews.${task.id}`
-          const stored = localStorage.getItem(key)
-          if (stored) {
-            const parsed = JSON.parse(stored)
-            if (Array.isArray(parsed)) {
-              setPreviews(parsed)
-              console.log('🔧 TaskDetailModal: loaded previews from localStorage:', parsed)
-            }
+    setName(task.name)
+    setStatus(task.status)
+    setOrderNumber(task.orderNumber)
+    setIntensity(task.intensity)
+    setStartDate(task.startDate)
+    setEndDate(task.endDate)
+    setComment(task.comment || '')
+    setFiles(task.files || [])
+    
+    // Atnaujinti previews iš localStorage tik jei task.id pasikeitė
+    if (task.id) {
+      try {
+        const key = `viadukai.filePreviews.${task.id}`
+        const stored = localStorage.getItem(key)
+        if (stored) {
+          const parsed = JSON.parse(stored)
+          if (Array.isArray(parsed)) {
+            setPreviews(parsed)
+            console.log('🔧 TaskDetailModal: loaded previews from localStorage:', parsed)
+          } else {
+            setPreviews([])
           }
-        } catch (error) {
-          console.error('🔧 TaskDetailModal: failed to load previews:', error)
+        } else {
+          setPreviews([])
         }
+      } catch (error) {
+        console.error('🔧 TaskDetailModal: failed to load previews:', error)
+        setPreviews([])
       }
     }
-  }, [task])
+  }, [task, open])
 
   useEffect(() => {
-    if (!safeTask.id) return
+    if (!safeTask.id || !open) return
     try {
       const key = `viadukai.filePreviews.${safeTask.id}`
       const sanitized = (previews || []).map(p => {
         const publicUrl = fileUrls[p.name]
         return publicUrl ? { name: p.name, src: publicUrl } : p
       }).filter(p => p && typeof p.src === 'string' && !p.src.startsWith('blob:'))
-      localStorage.setItem(key, JSON.stringify(sanitized))
+      
+      // Tik saugoti, jei tikrai pasikeitė
+      const currentStored = localStorage.getItem(key)
+      const sanitizedStr = JSON.stringify(sanitized)
+      if (currentStored !== sanitizedStr) {
+        localStorage.setItem(key, sanitizedStr)
+      }
     } catch {}
-  }, [previews, safeTask.id, fileUrls])
-
-  // Debug: klausytis previews pakeitimų
-  useEffect(() => {
-    console.log('🔧 TaskDetailModal: previews changed to:', previews)
-  }, [previews])
+  }, [previews, safeTask.id, fileUrls, open])
 
   const todayStr = new Date().toISOString().split('T')[0]
 
@@ -175,7 +187,6 @@ export default function TaskDetailModal({ isOpen, onClose, open: controlledOpen,
     return out
   }
 
-  const open = controlledOpen ?? !!isOpen
   const handleClose = () => {
     onOpenChange?.(false)
     onClose?.()

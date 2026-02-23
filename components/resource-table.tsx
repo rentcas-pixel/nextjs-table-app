@@ -5,6 +5,7 @@ import { isSupabaseEnabled, fetchClients as sbFetchClients, upsertClient as sbUp
 import TaskDetailModal from './task-detail-modal'
 import WaitingListModal from './waiting-list-modal'
 import RemindersPopup from './reminders-popup'
+import ReservedClientsWarningModal from './reserved-clients-warning-modal'
 import { generateExtendedWeeks, getCurrentWeekStart, WeekData, generateWeekValues, isYearBoundary } from '../lib/utils'
 
 interface ClientData {
@@ -125,6 +126,7 @@ export default function ResourceTable() {
   const [selectedTask, setSelectedTask] = useState<ClientData | null>(null)
   const [isWaitingListOpen, setIsWaitingListOpen] = useState(false)
   const [showRemindersPopup, setShowRemindersPopup] = useState(false)
+  const [showReservedWarningModal, setShowReservedWarningModal] = useState(false)
   const [hydrated, setHydrated] = useState(false)
 
   // Form state
@@ -211,13 +213,85 @@ export default function ResourceTable() {
     loadData()
   }, [isSupabaseEnabled])
 
-  // Save reminders to storage
+  // Automatiškai sukurti priminimus užkrovus duomenis
+  useEffect(() => {
+    if (!hydrated || clients.length === 0) return
+    
+    // Patikrinti visus "Rezervuota" klientus ir sukurti priminimus, jei reikia
+    setReminders(prev => {
+      const newReminders: Reminder[] = []
+      
+      clients.forEach(client => {
+        if (client.status === 'Rezervuota' && client.startDate) {
+          const reminderDate = getReminderDate21Days(client.startDate)
+          if (reminderDate) {
+            // Patikrinti, ar priminimas jau egzistuoja
+            const existingReminder = prev.find(r => 
+              r.clientId === client.id && r.message.includes('21 diena')
+            )
+            
+            if (!existingReminder) {
+              newReminders.push({
+                id: `r-${client.id}-21d-${Date.now()}`,
+                clientId: client.id,
+                remindAt: reminderDate,
+                message: `Kampanija "${client.name}" yra rezervuota. Iki kampanijos starto liko 21 diena.`,
+                status: 'active',
+                shownToday: false
+              })
+            } else if (existingReminder.remindAt !== reminderDate) {
+              // Atnaujinti esamą priminimą, jei data pasikeitė
+              const updated = prev.map(r => 
+                r.id === existingReminder.id
+                  ? { ...r, remindAt: reminderDate, status: 'active', shownToday: false }
+                  : r
+              )
+              return updated
+            }
+          }
+        }
+      })
+      
+      if (newReminders.length > 0) {
+        return [...prev, ...newReminders]
+      }
+      return prev
+    })
+  }, [hydrated, clients])
+
+  // Save reminders to storage (debounced)
+  const saveRemindersTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
   useEffect(() => {
     if (!hydrated) return
-    if (isSupabaseEnabled) {
-      reminders.forEach(r => sbUpsertReminder(r as any).catch(() => {}))
-    } else {
-      try { localStorage.setItem('viadukai.reminders', JSON.stringify(reminders)) } catch {}
+    
+    // Debounce saugojimą, kad nebandytų saugoti kiekvieną kartą
+    if (saveRemindersTimeoutRef.current) {
+      clearTimeout(saveRemindersTimeoutRef.current)
+    }
+    
+    saveRemindersTimeoutRef.current = setTimeout(() => {
+      if (isSupabaseEnabled) {
+        reminders.forEach(r => {
+          sbUpsertReminder(r as any).catch((err) => {
+            // Tik log'uoti tikras klaidas, ne 400/404 klaidas, kurios gali būti dėl duomenų struktūros
+            if (err?.code !== 'PGRST116' && err?.status !== 404) {
+              console.error('❌ Priminimas: klaida saugant į Supabase:', err)
+            }
+          })
+        })
+      } else {
+        try { 
+          localStorage.setItem('viadukai.reminders', JSON.stringify(reminders))
+        } catch (err) {
+          console.error('❌ Priminimas: klaida saugant į localStorage:', err)
+        }
+      }
+    }, 1000) // Saugoti po 1 sekundės
+    
+    return () => {
+      if (saveRemindersTimeoutRef.current) {
+        clearTimeout(saveRemindersTimeoutRef.current)
+      }
     }
   }, [reminders, hydrated, isSupabaseEnabled])
 
@@ -243,6 +317,35 @@ export default function ResourceTable() {
     }
   }, [hydrated, reminders])
 
+  // Automatiškai patikrinti "Rezervuota" klientus ir rodyti perspėjimo modalą
+  useEffect(() => {
+    if (!hydrated || clients.length === 0) return
+    
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    // Patikrinti, ar yra "Rezervuota" klientų, kuriems iki starto liko ≤21 diena
+    const warningClients = clients.filter(client => {
+      if (client.status !== 'Rezervuota' || !client.startDate) return false
+      
+      const start = new Date(client.startDate)
+      start.setHours(0, 0, 0, 0)
+      const diffDays = Math.floor((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      
+      return diffDays >= 0 && diffDays <= 21
+    })
+    
+    // Rodyti modalą, jei yra perspėjamų klientų
+    if (warningClients.length > 0) {
+      // Palaukti šiek tiek, kad puslapis užsikrautų
+      const timer = setTimeout(() => {
+        setShowReservedWarningModal(true)
+      }, 1000)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [hydrated, clients])
+
   // Helper functions
   const getTodayString = () => new Date().toISOString().split('T')[0]
 
@@ -254,6 +357,73 @@ export default function ResourceTable() {
     start.setHours(0,0,0,0)
     const diffDays = Math.floor((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
     return diffDays >= 0 && diffDays <= 14
+  }
+
+  // Apskaičiuoja 21 dienų priminimo datą (21 diena iki kampanijos starto)
+  const getReminderDate21Days = (startDate: string): string | null => {
+    if (!startDate) return null
+    const start = new Date(startDate)
+    const today = new Date()
+    today.setHours(0,0,0,0)
+    start.setHours(0,0,0,0)
+    
+    // Apskaičiuoti dienų skaičių iki starto
+    const diffDays = Math.floor((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    
+    // Jei iki starto liko 21 diena arba mažiau (bet ne mažiau nei 0), sukurti priminimą šiandien
+    if (diffDays >= 0 && diffDays <= 21) {
+      return today.toISOString().split('T')[0]
+    }
+    
+    // Jei iki starto liko daugiau nei 21 diena, sukurti priminimą 21 dieną iki starto
+    if (diffDays > 21) {
+      const reminderDate = new Date(start)
+      reminderDate.setDate(start.getDate() - 21)
+      reminderDate.setHours(0,0,0,0)
+      return reminderDate.toISOString().split('T')[0]
+    }
+    
+    // Jei kampanija jau prasidėjo, nebekurti priminimo
+    return null
+  }
+
+  // Automatiškai sukuria priminimą, jei klientas yra "Rezervuota" ir iki starto liko 21 diena
+  const autoCreateReminder21Days = (client: ClientData) => {
+    if (client.status !== 'Rezervuota' || !client.startDate) return
+    
+    const reminderDate = getReminderDate21Days(client.startDate)
+    if (!reminderDate) return
+    
+    // Naudoti callback, kad gautume naujausią reminders state
+    setReminders(prev => {
+      // Patikrinti, ar priminimas jau egzistuoja
+      const existingReminder = prev.find(r => r.clientId === client.id && r.message.includes('21 diena'))
+      
+      // Jei priminimas jau egzistuoja ir yra 21 dienų priminimas, patikrinti ar reikia jį atnaujinti
+      if (existingReminder) {
+        const shouldUpdate = existingReminder.remindAt !== reminderDate || 
+                            existingReminder.message !== `Kampanija "${client.name}" yra rezervuota. Iki kampanijos starto liko 21 diena.`
+        
+        if (shouldUpdate) {
+          return prev.map(r => 
+            r.id === existingReminder.id
+              ? { ...r, remindAt: reminderDate, message: `Kampanija "${client.name}" yra rezervuota. Iki kampanijos starto liko 21 diena.`, status: 'active', shownToday: false }
+              : r
+          )
+        }
+        return prev
+      }
+      
+      // Sukurti naują priminimą
+      return [...prev, { 
+        id: `r-${client.id}-21d-${Date.now()}`, 
+        clientId: client.id, 
+        remindAt: reminderDate, 
+        message: `Kampanija "${client.name}" yra rezervuota. Iki kampanijos starto liko 21 diena.`, 
+        status: 'active', 
+        shownToday: false 
+      }]
+    })
   }
 
   const isCurrentWeek = (week: WeekData) => {
@@ -315,6 +485,22 @@ export default function ResourceTable() {
       }
       
       console.log('🔧 Updated clients state:', next)
+      
+      // Automatiškai sukurti arba atnaujinti priminimą, jei reikia
+      const updatedClient = next.find(c => c.id === update.id)
+      if (updatedClient) {
+        // Jei klientas nebe "Rezervuota", pašalinti automatinį priminimą
+        if (updatedClient.status !== 'Rezervuota') {
+          const existingReminder = reminders.find(r => r.clientId === updatedClient.id)
+          if (existingReminder && existingReminder.message.includes('21 diena')) {
+            setReminders(prev => prev.filter(r => r.id !== existingReminder.id))
+          }
+        } else {
+          // Jei klientas yra "Rezervuota", sukurti arba atnaujinti priminimą
+          autoCreateReminder21Days(updatedClient)
+        }
+      }
+      
       return next
     })
   }
@@ -450,6 +636,9 @@ export default function ResourceTable() {
       
       return next
     })
+    
+    // Automatiškai sukurti priminimą, jei reikia
+    autoCreateReminder21Days(newClient)
     
     setNewClientForm({
       name: '',
@@ -935,6 +1124,13 @@ export default function ResourceTable() {
           onMarkCompleted={handleReminderCompleted}
         />
       )}
+
+      {/* Reserved Clients Warning Modal */}
+      <ReservedClientsWarningModal
+        open={showReservedWarningModal}
+        onClose={() => setShowReservedWarningModal(false)}
+        clients={clients}
+      />
     </div>
   )
 }
