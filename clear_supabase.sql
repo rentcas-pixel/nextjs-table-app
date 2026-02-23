@@ -1,2 +1,8 @@
-DELETE FROM public.clients;
-DELETE FROM public.reminders;
+-- ⚠️ DANGER: Šis failas TRINA VISUS DUOMENIS! ⚠️
+-- Nenaudokite šio failo, nebent tikrai norite ištrinti visus klientus ir priminimus!
+-- 
+-- Šis failas buvo sukurtas tik testavimo tikslams.
+-- Jei reikia ištrinti duomenis, naudokite Supabase Dashboard → Table Editor → Delete rows
+--
+-- DELETE FROM public.clients;
+-- DELETE FROM public.reminders;

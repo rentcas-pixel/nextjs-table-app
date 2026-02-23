@@ -142,7 +142,7 @@ export default function ResourceTable() {
   const [statusFilter, setStatusFilter] = useState<'All' | 'Patvirtinta' | 'Rezervuota' | 'Atšaukta'>('All')
   const [dateFromFilter, setDateFromFilter] = useState<string>('')
   const [dateToFilter, setDateToFilter] = useState<string>('')
-  const [sortBy, setSortBy] = useState<'name' | 'orderNumber' | 'startDate' | 'endDate' | 'status'>('name')
+  const [sortBy, setSortBy] = useState<'name' | 'orderNumber' | 'startDate' | 'endDate' | 'status' | 'warning'>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   // Pagination state
@@ -162,21 +162,35 @@ export default function ResourceTable() {
     const loadData = async () => {
       try {
         if (isSupabaseEnabled) {
+          console.log('Loading data from Supabase...')
           const [c, r] = await Promise.all([sbFetchClients(), sbFetchReminders()])
-          if (Array.isArray(c) && c.length) {
+          console.log('Fetched clients:', c)
+          console.log('Fetched reminders:', r)
+          
+          if (Array.isArray(c) && c.length > 0) {
             setClients(c as any)
           } else {
+            console.log('No clients from Supabase, using DEFAULT_CLIENTS')
             setClients(DEFAULT_CLIENTS)
           }
-          if (Array.isArray(r) && c.length) setReminders(r as any)
+          
+          if (Array.isArray(r) && r.length > 0) {
+            setReminders(r as any)
+          } else {
+            setReminders([])
+          }
         } else {
+          console.log('Supabase not enabled, loading from localStorage...')
           const storedClients = localStorage.getItem('viadukai.clients')
           const storedReminders = localStorage.getItem('viadukai.reminders')
           
           if (storedClients) {
             const parsed = JSON.parse(storedClients)
-            if (Array.isArray(parsed)) setClients(parsed)
-            else setClients(DEFAULT_CLIENTS)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setClients(parsed)
+            } else {
+              setClients(DEFAULT_CLIENTS)
+            }
           } else {
             setClients(DEFAULT_CLIENTS)
           }
@@ -189,6 +203,7 @@ export default function ResourceTable() {
       } catch (error) {
         console.error('Error loading data:', error)
         setClients(DEFAULT_CLIENTS)
+        setReminders([])
       }
       setHydrated(true)
     }
@@ -486,6 +501,33 @@ export default function ResourceTable() {
     
     const compare = (a: any, b: any) => {
       const dir = sortDir === 'asc' ? 1 : -1
+      
+      // Specialus rūšiavimas pagal perspėjimą
+      if (sortBy === 'warning') {
+        const aHasWarning = isWarningClient(a)
+        const bHasWarning = isWarningClient(b)
+        
+        // Pirmiausia tie, kurie turi perspėjimą
+        if (aHasWarning && !bHasWarning) return -dir
+        if (!aHasWarning && bHasWarning) return dir
+        
+        // Jei abu turi arba abu neturi perspėjimą, rūšiuojame pagal dienų skaičių iki starto
+        if (aHasWarning && bHasWarning) {
+          const aDays = a.startDate ? Math.floor((new Date(a.startDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : Infinity
+          const bDays = b.startDate ? Math.floor((new Date(b.startDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : Infinity
+          if (aDays !== bDays) return aDays > bDays ? dir : -dir
+        }
+        
+        // Jei abu neturi perspėjimų, rūšiuojame pagal statusą (Rezervuota pirmiau)
+        if (!aHasWarning && !bHasWarning) {
+          if (a.status === 'Rezervuota' && b.status !== 'Rezervuota') return -dir
+          if (a.status !== 'Rezervuota' && b.status === 'Rezervuota') return dir
+        }
+        
+        // Jei vis dar lygu, rūšiuojame pagal pavadinimą
+        return a.name.toLowerCase() > b.name.toLowerCase() ? dir : -dir
+      }
+      
       let av: any = a[sortBy]
       let bv: any = b[sortBy]
       if (sortBy === 'name' || sortBy === 'orderNumber' || sortBy === 'status') {
@@ -514,6 +556,22 @@ export default function ResourceTable() {
         .reduce((sum, client) => sum + (client.weeks[week.id] || 0), 0)
     })
     return sums
+  }, [clientsWithCalculatedWeeks, weeks])
+
+  // Klientų sąrašas per savaitę (tooltip'ui)
+  const weekClients = useMemo(() => {
+    const clients: { [weekId: string]: { name: string; value: number; status: string }[] } = {}
+    weeks.forEach(week => {
+      clients[week.id] = clientsWithCalculatedWeeks
+        .filter(client => client.status !== 'Atšaukta' && client.weeks[week.id] > 0)
+        .map(client => ({
+          name: client.name,
+          value: client.weeks[week.id],
+          status: client.status
+        }))
+        .sort((a, b) => b.value - a.value) // Rūšiuoti pagal reikšmę (didžiausia viršuje)
+    })
+    return clients
   }, [clientsWithCalculatedWeeks, weeks])
 
   // Reset page when filters change
@@ -583,6 +641,7 @@ export default function ResourceTable() {
               <option value="startDate">Rūšiuoti: Data nuo</option>
               <option value="endDate">Rūšiuoti: Data iki</option>
               <option value="status">Rūšiuoti: Statusas</option>
+              <option value="warning">Rūšiuoti: Perspėjimas (≤14 d.)</option>
             </select>
             <select value={sortDir} onChange={(e)=>setSortDir(e.target.value as any)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
               <option value="asc">↑</option>
@@ -762,7 +821,7 @@ export default function ResourceTable() {
             <span className="text-sm font-semibold text-gray-900 min-w-[100px] border-r border-gray-200 pr-4 sticky left-[220px] z-30 bg-gray-100 shadow-r" style={{ position: 'sticky', left: '220px' }}></span>
             <span className="text-sm font-semibold text-gray-900 min-w-[120px] border-r border-gray-200 pr-4"></span>
             {weeks.map((week, index) => (
-              <span key={week.id} className={`text-sm font-semibold text-gray-900 min-w-[100px] text-center border-r border-gray-200 pr-4 ${
+              <span key={week.id} className={`relative text-sm font-semibold text-gray-900 min-w-[100px] text-center border-r border-gray-200 pr-4 group cursor-pointer ${
                 index === weeks.length - 1 ? '' : 'border-r'
               } ${week.isYearBoundary ? 'border-l-2 border-l-green-500' : ''}`}>
                 <span className={`${
@@ -772,6 +831,35 @@ export default function ResourceTable() {
                 }`}>
                   {weekSums[week.id]}
                 </span>
+                {/* Tooltip su klientų sąrašu */}
+                {weekClients[week.id]?.length > 0 && (
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-50">
+                    <div className="bg-gray-900 text-white text-xs rounded-lg shadow-lg p-3 min-w-[200px] max-w-[300px]">
+                      <div className="font-semibold mb-2 text-gray-300 border-b border-gray-700 pb-1">
+                        {week.shortLabel} • {weekClients[week.id].length} klient{weekClients[week.id].length === 1 ? 'as' : 'ai'}
+                      </div>
+                      <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                        {weekClients[week.id].map((client, idx) => (
+                          <div key={idx} className="flex justify-between items-center gap-2">
+                            <span className="truncate flex-1">{client.name}</span>
+                            <span className={`font-mono text-xs px-1.5 py-0.5 rounded ${
+                              client.status === 'Patvirtinta' 
+                                ? 'bg-green-600/50' 
+                                : 'bg-yellow-600/50'
+                            }`}>
+                              {client.value}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-2 pt-1 border-t border-gray-700 text-gray-400 text-right">
+                        Viso: <span className="text-white font-semibold">{weekSums[week.id]}</span>
+                      </div>
+                    </div>
+                    {/* Rodyklė */}
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-8 border-transparent border-t-gray-900"></div>
+                  </div>
+                )}
               </span>
             ))}
           </div>
