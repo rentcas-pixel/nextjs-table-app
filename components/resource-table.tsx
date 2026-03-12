@@ -6,6 +6,7 @@ import TaskDetailModal from './task-detail-modal'
 import WaitingListModal from './waiting-list-modal'
 import RemindersPopup from './reminders-popup'
 import ReservedClientsWarningModal from './reserved-clients-warning-modal'
+import AddClientModal, { type NewClientForm } from './add-client-modal'
 import { generateExtendedWeeks, getCurrentWeekStart, WeekData, generateWeekValues, isYearBoundary } from '../lib/utils'
 
 interface ClientData {
@@ -20,15 +21,6 @@ interface ClientData {
   hasWarning?: boolean
   comment?: string
   files?: { name: string; size: number }[]
-}
-
-interface NewClientForm {
-  name: string
-  status: 'Patvirtinta' | 'Rezervuota' | 'Atšaukta'
-  orderNumber: string
-  startDate: string
-  endDate: string
-  intensity: string
 }
 
 interface Reminder {
@@ -128,28 +120,20 @@ export default function ResourceTable() {
   const [showRemindersPopup, setShowRemindersPopup] = useState(false)
   const [showReservedWarningModal, setShowReservedWarningModal] = useState(false)
   const [hydrated, setHydrated] = useState(false)
-
-  // Form state
-  const [newClientForm, setNewClientForm] = useState<NewClientForm>({
-    name: '',
-    status: 'Patvirtinta',
-    orderNumber: '',
-    startDate: '',
-    endDate: '',
-    intensity: 'kas 4 (25%)'
-  })
+  const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false)
 
   // Filter and search state
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [statusFilter, setStatusFilter] = useState<'All' | 'Patvirtinta' | 'Rezervuota' | 'Atšaukta'>('All')
   const [dateFromFilter, setDateFromFilter] = useState<string>('')
   const [dateToFilter, setDateToFilter] = useState<string>('')
-  const [sortBy, setSortBy] = useState<'name' | 'orderNumber' | 'startDate' | 'endDate' | 'status' | 'warning'>('name')
+  const [showInactiveClients, setShowInactiveClients] = useState<boolean>(false)
+  const [sortBy, setSortBy] = useState<'name' | 'orderNumber' | 'startDate' | 'endDate' | 'status' | 'warning' | 'date'>('date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   // Pagination state
   const [page, setPage] = useState<number>(1)
-  const [pageSize, setPageSize] = useState<number>(10)
+  const [pageSize, setPageSize] = useState<number>(20)
 
   // Timer for warnings
   const [nowTick, setNowTick] = useState<number>(Date.now())
@@ -586,41 +570,26 @@ export default function ResourceTable() {
 
   const getReminder = (clientId: string) => reminders.find(r => r.clientId === clientId)
 
-  // Form handling
-  const handleFormChange = (field: keyof NewClientForm, value: string) => {
-    setNewClientForm(prev => ({ ...prev, [field]: value }))
-  }
-
-  const handleAddClient = () => {
-    if (!newClientForm.name || !newClientForm.orderNumber || !newClientForm.startDate || !newClientForm.endDate) {
-      alert('Prašome užpildyti visus privalomus laukus')
-      return
-    }
-
-    if (new Date(newClientForm.endDate) <= new Date(newClientForm.startDate)) {
-      alert('Pabaigos data turi būti po pradžios datos')
-      return
-    }
-
+  const handleAddClient = (form: NewClientForm): boolean => {
     const existingClient = clients.find(client => 
-      client.name.toLowerCase() === newClientForm.name.toLowerCase() && 
-      client.orderNumber.toLowerCase() === newClientForm.orderNumber.toLowerCase()
+      client.name.toLowerCase() === form.name.toLowerCase() && 
+      client.orderNumber.toLowerCase() === form.orderNumber.toLowerCase()
     )
     
     if (existingClient) {
       alert('Klientas su tokiu pavadinimu ir užsakymo numeriu jau egzistuoja!')
-      return
+      return false
     }
 
     const newClient: ClientData = {
       id: Date.now().toString(),
-      name: newClientForm.name,
-      status: newClientForm.status,
-      orderNumber: newClientForm.orderNumber,
-      startDate: newClientForm.startDate,
-      endDate: newClientForm.endDate,
-      intensity: newClientForm.intensity,
-      weeks: generateWeekValues(newClientForm.startDate, newClientForm.endDate, newClientForm.intensity, weeks),
+      name: form.name,
+      status: form.status,
+      orderNumber: form.orderNumber,
+      startDate: form.startDate,
+      endDate: form.endDate,
+      intensity: form.intensity,
+      weeks: generateWeekValues(form.startDate, form.endDate, form.intensity, weeks),
       hasWarning: false,
       comment: ''
     }
@@ -637,17 +606,8 @@ export default function ResourceTable() {
       return next
     })
     
-    // Automatiškai sukurti priminimą, jei reikia
     autoCreateReminder21Days(newClient)
-    
-    setNewClientForm({
-      name: '',
-      status: 'Patvirtinta',
-      orderNumber: '',
-      startDate: '',
-      endDate: '',
-      intensity: 'kas 4 (25%)'
-    })
+    return true
   }
 
   // Modal handling
@@ -678,9 +638,21 @@ export default function ResourceTable() {
     }))
   }, [clients, weeks])
 
+  // Klientai, įskaitant tik tuos, kurių kampanija per pastaruosius 2 mėn. (kai showInactiveClients = false)
+  const twoMonthsAgoStr = useMemo(() => {
+    const d = new Date()
+    d.setMonth(d.getMonth() - 2)
+    return d.toISOString().split('T')[0]
+  }, [nowTick])
+  const clientsForSums = useMemo(() => {
+    if (showInactiveClients) return clientsWithCalculatedWeeks
+    return clientsWithCalculatedWeeks.filter(c => !c.endDate || c.endDate >= twoMonthsAgoStr)
+  }, [clientsWithCalculatedWeeks, showInactiveClients, twoMonthsAgoStr])
+
   const filteredAndSortedClients = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
-    let arr = clientsWithCalculatedWeeks.filter(c => {
+    // clientsForSums jau filtruoja pagal aktyvų periodą – naudojame tą patį sąrašą
+    let arr = clientsForSums.filter(c => {
       const matchesQ = !q || c.name.toLowerCase().includes(q) || c.orderNumber.toLowerCase().includes(q)
       const matchesStatus = statusFilter === 'All' || c.status === statusFilter
       const matchesFrom = !dateFromFilter || (c.startDate && c.startDate >= dateFromFilter)
@@ -690,7 +662,28 @@ export default function ResourceTable() {
     
     const compare = (a: any, b: any) => {
       const dir = sortDir === 'asc' ? 1 : -1
-      
+      const todayStr = new Date().toISOString().split('T')[0]
+
+      // Rūšiavimas pagal datą: dabar einantys viršuje, tada artimiausios ateityje, likę apačioje
+      if (sortBy === 'date') {
+        const isOngoing = (c: any) => c.startDate && c.endDate && c.startDate <= todayStr && c.endDate >= todayStr
+        const isFuture = (c: any) => c.startDate && c.startDate > todayStr
+        const aOngoing = isOngoing(a)
+        const bOngoing = isOngoing(b)
+        const aFuture = isFuture(a)
+        const bFuture = isFuture(b)
+        // 1) Dabar einantys viršuje
+        if (aOngoing && !bOngoing) return -1
+        if (!aOngoing && bOngoing) return 1
+        if (aOngoing && bOngoing) return (a.endDate || '').localeCompare(b.endDate || '')
+        // 2) Ateities kampanijos – artimiausios pirmiau
+        if (aFuture && !bFuture) return -1
+        if (!aFuture && bFuture) return 1
+        if (aFuture && bFuture) return (a.startDate || '').localeCompare(b.startDate || '')
+        // 3) Praeities – naujausios (didžiausia endDate) viršuje
+        return (b.endDate || '').localeCompare(a.endDate || '')
+      }
+
       // Specialus rūšiavimas pagal perspėjimą
       if (sortBy === 'warning') {
         const aHasWarning = isWarningClient(a)
@@ -729,7 +722,7 @@ export default function ResourceTable() {
     
     arr.sort(compare)
     return arr
-  }, [clientsWithCalculatedWeeks, searchQuery, statusFilter, dateFromFilter, dateToFilter, sortBy, sortDir])
+  }, [clientsForSums, searchQuery, statusFilter, dateFromFilter, dateToFilter, sortBy, sortDir])
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(filteredAndSortedClients.length / pageSize)), [filteredAndSortedClients.length, pageSize])
   const paginatedClients = useMemo(() => {
@@ -740,18 +733,18 @@ export default function ResourceTable() {
   const weekSums = useMemo(() => {
     const sums: { [weekId: string]: number } = {}
     weeks.forEach(week => {
-      sums[week.id] = clientsWithCalculatedWeeks
+      sums[week.id] = clientsForSums
         .filter(client => client.status !== 'Atšaukta')
         .reduce((sum, client) => sum + (client.weeks[week.id] || 0), 0)
     })
     return sums
-  }, [clientsWithCalculatedWeeks, weeks])
+  }, [clientsForSums, weeks])
 
   // Klientų sąrašas per savaitę (tooltip'ui)
   const weekClients = useMemo(() => {
     const clients: { [weekId: string]: { name: string; value: number; status: string }[] } = {}
     weeks.forEach(week => {
-      clients[week.id] = clientsWithCalculatedWeeks
+      clients[week.id] = clientsForSums
         .filter(client => client.status !== 'Atšaukta' && client.weeks[week.id] > 0)
         .map(client => ({
           name: client.name,
@@ -761,7 +754,7 @@ export default function ResourceTable() {
         .sort((a, b) => b.value - a.value) // Rūšiuoti pagal reikšmę (didžiausia viršuje)
     })
     return clients
-  }, [clientsWithCalculatedWeeks, weeks])
+  }, [clientsForSums, weeks])
 
   // Reset page when filters change
   useEffect(() => { if (page > totalPages) setPage(totalPages) }, [totalPages, page])
@@ -798,6 +791,11 @@ export default function ResourceTable() {
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      {/* Header su logotipu */}
+      <header className="flex justify-center items-center py-9 border-b border-gray-200 bg-white">
+        <img src="/Piksel-logo.jpg" alt="Logo" className="h-[39px] object-contain" />
+      </header>
+
       {/* Search and Filter */}
       <div className="p-4 border-b border-gray-200 bg-gray-100">
         <div className="flex items-center gap-4">
@@ -825,6 +823,7 @@ export default function ResourceTable() {
             <input type="date" lang="en-CA" value={dateFromFilter} onChange={(e)=>{ setDateFromFilter(e.target.value); setPage(1) }} className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white" />
             <input type="date" lang="en-CA" value={dateToFilter} onChange={(e)=>{ setDateToFilter(e.target.value); setPage(1) }} className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white" />
             <select value={sortBy} onChange={(e)=>setSortBy(e.target.value as any)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+              <option value="date">Rūšiuoti: Data (einantys viršuje)</option>
               <option value="name">Rūšiuoti: Pavadinimas</option>
               <option value="orderNumber">Rūšiuoti: Užsakymo Nr.</option>
               <option value="startDate">Rūšiuoti: Data nuo</option>
@@ -836,97 +835,34 @@ export default function ResourceTable() {
               <option value="asc">↑</option>
               <option value="desc">↓</option>
             </select>
+            <label className="flex items-center gap-2 cursor-pointer whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={showInactiveClients}
+                onChange={(e)=>{ setShowInactiveClients(e.target.checked); setPage(1) }}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700">Rodyti neaktyvius</span>
+            </label>
           </div>
         </div>
       </div>
 
-      {/* Add Client Section */}
-      <div className="p-6 border-b border-gray-200">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">Pridėti klientą</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4 items-end">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Pavadinimas *</label>
-            <input
-              type="text"
-              placeholder="Įveskite kliento pavadinimą"
-              value={newClientForm.name}
-              onChange={(e) => handleFormChange('name', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-gray-900 placeholder-gray-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Statusas</label>
-            <select 
-              value={newClientForm.status}
-              onChange={(e) => handleFormChange('status', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-gray-900"
-            >
-              <option value="Patvirtinta">Patvirtinta</option>
-              <option value="Rezervuota">Rezervuota</option>
-              <option value="Atšaukta">Atšaukta</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Užsakymo Nr. *</label>
-            <input
-              type="text"
-              placeholder="Įveskite užsakymo numerį"
-              value={newClientForm.orderNumber}
-              onChange={(e) => handleFormChange('orderNumber', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-gray-900 placeholder-gray-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Data nuo *</label>
-            <input
-              type="date"
-              lang="en-CA"
-              value={newClientForm.startDate}
-              onChange={(e) => handleFormChange('startDate', e.target.value)}
-              min={getTodayString()}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-gray-900"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Data iki *</label>
-            <input
-              type="date"
-              lang="en-CA"
-              value={newClientForm.endDate}
-              onChange={(e) => handleFormChange('endDate', e.target.value)}
-              min={newClientForm.startDate || getTodayString()}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-gray-900"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Intensyvumas</label>
-            <select 
-              value={newClientForm.intensity}
-              onChange={(e) => handleFormChange('intensity', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-gray-900"
-            >
-              <option value="kas 4 (25%)">Kas 4</option>
-              <option value="kas 2 (50%)">Kas 2</option>
-              <option value="kas 1 (100%)">Kas 1</option>
-            </select>
-          </div>
-          <div className="flex gap-2 items-center">
-            <button 
-              onClick={handleAddClient}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap"
-            >
-              + Pridėti
-            </button>
-            
-            <button 
-              onClick={() => setIsWaitingListOpen(true)}
-              className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 font-medium whitespace-nowrap transition-colors"
-              title="Waiting List - klientai, kurie laukia vietos"
-            >
-              Laukia
-            </button>
-          </div>
-        </div>
+      {/* Add Client + Waiting List */}
+      <div className="p-4 border-b border-gray-200 flex gap-2">
+        <button 
+          onClick={() => setIsAddClientModalOpen(true)}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap"
+        >
+          + Pridėti klientą
+        </button>
+        <button 
+          onClick={() => setIsWaitingListOpen(true)}
+          className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 font-medium whitespace-nowrap transition-colors"
+          title="Waiting List - klientai, kurie laukia vietos"
+        >
+          Laukia
+        </button>
       </div>
 
       {/* Main Table */}
@@ -934,8 +870,9 @@ export default function ResourceTable() {
         <table className="w-full relative z-10">
           <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-30">
             <tr>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 min-w-[220px] border-r border-gray-200 sticky left-0 z-40 bg-gray-50">Pavadinimas</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 min-w-[100px] border-r border-gray-200 sticky left-[220px] z-40 bg-gray-50 shadow-r">Status</th>
+              <th className="px-2 py-3 text-center text-sm font-medium text-gray-900 min-w-[48px] border-r border-gray-200 sticky left-0 z-40 bg-gray-50">Nr</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 min-w-[220px] border-r border-gray-200 sticky left-[48px] z-40 bg-gray-50">Pavadinimas</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 min-w-[100px] border-r border-gray-200 sticky left-[268px] z-40 bg-gray-50 shadow-r">Status</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 min-w-[120px] border-r border-gray-200">Užsakymo Nr.</th>
               {weeks.map((week, index) => (
                 <th 
@@ -957,9 +894,12 @@ export default function ResourceTable() {
             </tr>
           </thead>
           <tbody className={`divide-y divide-gray-100 transition-opacity ${hydrated ? 'opacity-100' : 'opacity-0'}` } style={{ paddingTop: '144px' }}>
-            {paginatedClients.map((client) => (
+            {paginatedClients.map((client, index) => (
               <tr key={client.id} className="hover:bg-transparent cursor-pointer transition-colors" onDoubleClick={() => openModal(client)}>
-                <td className="px-4 py-3 border-r border-gray-200 sticky left-0 z-5 bg-white" onClick={() => openModal(client)}>
+                <td className="px-2 py-3 text-center text-sm text-gray-500 border-r border-gray-200 sticky left-0 z-5 bg-white" onClick={() => openModal(client)}>
+                  {(page - 1) * pageSize + index + 1}
+                </td>
+                <td className="px-4 py-3 border-r border-gray-200 sticky left-[48px] z-5 bg-white" onClick={() => openModal(client)}>
                   <div className="flex items-center gap-3">
                     <input type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" onClick={(e)=>e.stopPropagation()} />
                     <div className="flex items-center gap-2 cursor-pointer select-none">
@@ -970,7 +910,7 @@ export default function ResourceTable() {
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3 border-r border-gray-200 sticky left-[220px] z-5 bg-white shadow-r" onClick={() => openModal(client)}>
+                <td className="px-4 py-3 border-r border-gray-200 sticky left-[268px] z-5 bg-white shadow-r" onClick={() => openModal(client)}>
                   <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full border ${
                     client.status === 'Patvirtinta' 
                       ? 'bg-green-100 text-green-800 border-green-200' 
@@ -988,7 +928,9 @@ export default function ResourceTable() {
                       client.weeks[week.id] && client.weeks[week.id] > 0 
                         ? client.weeks[week.id] > 240 
                           ? 'text-white bg-red-500 px-2 py-1 rounded font-bold' 
-                          : 'text-blue-600' 
+                          : client.weeks[week.id] === 40 
+                            ? 'text-blue-600 bg-blue-50 px-2 py-1 rounded' 
+                            : 'text-blue-600' 
                         : 'text-gray-400'
                     }`}>
                       {client.weeks[week.id] || 0}
@@ -1006,8 +948,9 @@ export default function ResourceTable() {
         {/* Suma Row */}
         <div className="bg-gray-100 border-t border-gray-200 sticky top-[72px] z-20" style={{ position: 'sticky', top: '72px' }}>
           <div className="flex items-center px-4 py-3 relative">
-            <span className="text-sm font-semibold text-gray-900 min-w-[220px] border-r border-gray-200 pr-4 sticky left-0 z-30 bg-gray-100" style={{ position: 'sticky', left: '0' }}>Transliacijų viso:</span>
-            <span className="text-sm font-semibold text-gray-900 min-w-[100px] border-r border-gray-200 pr-4 sticky left-[220px] z-30 bg-gray-100 shadow-r" style={{ position: 'sticky', left: '220px' }}></span>
+            <span className="text-sm font-semibold text-gray-900 min-w-[48px] border-r border-gray-200 pr-2 text-center sticky left-0 z-30 bg-gray-100" style={{ position: 'sticky', left: '0' }}></span>
+            <span className="text-sm font-semibold text-gray-900 min-w-[220px] border-r border-gray-200 pr-4 sticky left-[48px] z-30 bg-gray-100" style={{ position: 'sticky', left: '48px' }}>Transliacijų viso:</span>
+            <span className="text-sm font-semibold text-gray-900 min-w-[100px] border-r border-gray-200 pr-4 sticky left-[268px] z-30 bg-gray-100 shadow-r" style={{ position: 'sticky', left: '268px' }}></span>
             <span className="text-sm font-semibold text-gray-900 min-w-[120px] border-r border-gray-200 pr-4"></span>
             {weeks.map((week, index) => (
               <span key={week.id} className={`relative text-sm font-semibold text-gray-900 min-w-[100px] text-center border-r border-gray-200 pr-4 group cursor-pointer ${
@@ -1016,7 +959,9 @@ export default function ResourceTable() {
                 <span className={`${
                   weekSums[week.id] >= 240 
                     ? 'text-white bg-red-500 px-2 py-1 rounded font-bold' 
-                    : ''
+                    : weekSums[week.id] === 40 
+                      ? 'bg-blue-50 px-2 py-1 rounded' 
+                      : ''
                 }`}>
                   {weekSums[week.id]}
                 </span>
@@ -1062,8 +1007,8 @@ export default function ResourceTable() {
           <select value={pageSize} onChange={(e)=>{ setPageSize(parseInt(e.target.value)); setPage(1) }} className="ml-2 mr-2 px-2 py-1 border border-gray-300 rounded">
             <option value={5}>5</option>
             <option value={10}>10</option>
-            <option value="20">20</option>
-            <option value="100">100</option>
+            <option value={20}>20</option>
+            <option value={100}>100</option>
           </select>
           įrašų. Iš viso: {filteredAndSortedClients.length}
         </div>
@@ -1113,6 +1058,12 @@ export default function ResourceTable() {
       <WaitingListModal
         open={isWaitingListOpen}
         onOpenChange={(v) => setIsWaitingListOpen(v)}
+      />
+
+      <AddClientModal
+        open={isAddClientModalOpen}
+        onOpenChange={setIsAddClientModalOpen}
+        onAdd={handleAddClient}
       />
 
       {/* Reminders Popup */}
