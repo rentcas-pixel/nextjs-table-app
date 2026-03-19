@@ -874,22 +874,39 @@ export default function ResourceTable() {
               <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 min-w-[220px] border-r border-gray-200 sticky left-[48px] z-40 bg-gray-50">Pavadinimas</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 min-w-[100px] border-r border-gray-200 sticky left-[268px] z-40 bg-gray-50 shadow-r">Status</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 min-w-[120px] border-r border-gray-200">Užsakymo Nr.</th>
-              {weeks.map((week, index) => (
+              {weeks.map((week, index) => {
+                const fillPercent = Math.min(100, Math.round(((weekSums[week.id] || 0) / 240) * 100))
+                return (
                 <th 
                   key={week.id} 
-                  className={`px-3 py-3 text-center text-sm font-medium text-gray-900 min-w-[100px] border-r border-gray-200 sticky top-0 z-30 bg-gray-50 ${
+                  className={`px-3 py-3 text-center text-sm font-medium text-gray-900 min-w-[100px] border-r border-gray-200 sticky top-0 z-30 relative overflow-hidden bg-gray-50 ${
                     index === weeks.length - 1 ? '' : 'border-r'
                   } ${week.isYearBoundary ? 'border-l-2 border-l-green-500' : ''}`}
                 >
-                  <div className={`font-semibold ${isCurrentWeek(week) ? 'text-green-600' : 'text-gray-800'}`}>
+                  {fillPercent > 0 && (
+                    <div
+                      className="absolute left-0 top-0 h-[5px]"
+                      style={{
+                        width: `${fillPercent}%`,
+                        backgroundColor: fillPercent >= 100 ? 'rgba(55,65,81,0.8)' : fillPercent >= 75 ? 'rgba(55,65,81,0.5)' : 'rgba(55,65,81,0.3)',
+                      }}
+                    />
+                  )}
+                  <div className={`relative z-10 font-semibold ${isCurrentWeek(week) ? 'text-green-600' : 'text-gray-800'}`}>
                     {week.shortLabel}
                     {week.isYearBoundary && <span className="text-green-600 text-xs ml-1">→{week.year}</span>}
                   </div>
-                  <div className="text-xs text-gray-500 font-normal mt-1">
+                  <div className="relative z-10 text-xs text-gray-500 font-normal mt-1">
                     {week.startDate.toLocaleDateString('lt-LT', { day: '2-digit', month: '2-digit' })} - {week.endDate.toLocaleDateString('lt-LT', { day: '2-digit', month: '2-digit' })}
                   </div>
+                  {fillPercent > 0 && (
+                    <div className="relative z-10 text-[10px] font-medium mt-0.5" style={{ color: fillPercent >= 75 ? 'rgb(75,85,99)' : 'rgb(156,163,175)' }}>
+                      {fillPercent}%
+                    </div>
+                  )}
                 </th>
-              ))}
+                )
+              })}
               <th className="px-3 py-3 text-center text-sm font-medium text-gray-900 min-w-[90px]">Veiksmai</th>
             </tr>
           </thead>
