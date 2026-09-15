@@ -13,10 +13,24 @@ export function formatDate(date: Date): string {
   })
 }
 
-export function getWeekNumber(date: Date): number {
+function legacyWeekNumber(date: Date): number {
   const firstDayOfYear = new Date(date.getFullYear(), 0, 1)
   const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000
   return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7)
+}
+
+function isoWeekNumber(date: Date): number {
+  const utc = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const dayNum = utc.getUTCDay() || 7
+  utc.setUTCDate(utc.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1))
+  return Math.ceil(((utc.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
+}
+
+export function getWeekNumber(date: Date): number {
+  // 2027 m. sena formulė praleidžia W1 (po W53 eina W2). Tik šiuos metus skaičiuojame ISO.
+  if (date.getFullYear() === 2027) return isoWeekNumber(date)
+  return legacyWeekNumber(date)
 }
 
 export function calculateIntensity(percentage: number): string {
